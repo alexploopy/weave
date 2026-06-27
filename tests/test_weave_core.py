@@ -288,6 +288,11 @@ class MissingCredentialsTests(_WeaveBase):
         os.environ.pop("SUPABASE_URL", None)
         os.environ.pop("SUPABASE_KEY", None)
         self.addCleanup(env.stop)
+        # Neutralise .env autoload so the creds stay genuinely absent.
+        loader = mock.patch("weave.merge.env.ensure_dotenv_loaded",
+                            return_value=None)
+        loader.start()
+        self.addCleanup(loader.stop)
         core.remote_add("origin", "weave://team", path=self.cfg)
 
     def test_pull_without_creds_is_weave_error(self):

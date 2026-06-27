@@ -39,6 +39,11 @@ def _client():
     if _client_cache is not None:
         return _client_cache
 
+    # Pull SUPABASE_* from a `.env` (cwd or repo root) when not already in the
+    # environment, mirroring how the merge layer resolves its Cerebras creds.
+    from weave.merge.env import ensure_dotenv_loaded
+    ensure_dotenv_loaded()
+
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
     if not url or not key:

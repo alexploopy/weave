@@ -83,10 +83,33 @@ class CredentialTests(unittest.TestCase):
         os.environ.pop("SUPABASE_URL", None)
         os.environ.pop("SUPABASE_KEY", None)
         self.addCleanup(env.stop)
+        # Neutralise .env autoload so "missing" means missing from the
+        # environment AND from any real .env on disk.
+        loader = mock.patch("weave.merge.env.ensure_dotenv_loaded",
+                            return_value=None)
+        loader.start()
+        self.addCleanup(loader.stop)
 
     def test_missing_creds_raises_server_error(self):
         with self.assertRaises(server.ServerError):
             server.push("weave://team", "auth", "T\n")
+
+    def test_credentials_loaded_from_dotenv(self):
+        """_client consults the .env loader; creds it sets are picked up."""
+        def fake_loader():
+            os.environ["SUPABASE_URL"] = "https://from-dotenv.supabase.co"
+            os.environ["SUPABASE_KEY"] = "dotenv-svc-key"
+
+        fake_mod = types.ModuleType("supabase")
+        seen = {}
+        fake_mod.create_client = lambda url, key: seen.update(url=url, key=key) or object()
+        with mock.patch.dict(sys.modules, {"supabase": fake_mod}):
+            with mock.patch("weave.merge.env.ensure_dotenv_loaded",
+                            side_effect=fake_loader):
+                client = server._client()
+        self.assertIsNotNone(client)
+        self.assertEqual(seen["url"], "https://from-dotenv.supabase.co")
+        self.assertEqual(seen["key"], "dotenv-svc-key")
 
 
 if __name__ == "__main__":
