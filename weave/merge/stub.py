@@ -1,8 +1,4 @@
-"""Deterministic stub merger for tests and local development.
-
-TODO: Replace with a Cerebras HTTP client that prompts the model and parses
-structured JSON into :class:`MergedContext`.
-"""
+"""Deterministic in-memory merger for tests and local development."""
 
 from __future__ import annotations
 
