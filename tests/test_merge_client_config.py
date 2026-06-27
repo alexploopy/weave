@@ -10,10 +10,12 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from weave.merge.client import HttpCerebrasClient
+from weave.merge.client import HttpCerebrasClient, default_cerebras_client
 from weave.merge.env import (
+    cerebras_configured,
     chat_completions_url,
     describe_cerebras_config,
+    get_default_model,
     load_dotenv_file,
     normalize_base_url,
     repo_root,
@@ -100,6 +102,31 @@ class HttpCerebrasClientConfigTests(unittest.TestCase):
                 client.complete("prompt")
         self.assertIn("HTTP 403", str(ctx.exception))
         self.assertNotIn("secret-key-value", str(ctx.exception))
+
+
+class DefaultModelTests(unittest.TestCase):
+    def test_defaults_to_zai_when_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("weave.merge.env.ensure_dotenv_loaded", return_value=None):
+                self.assertEqual(get_default_model(), "zai-glm-4.7")
+
+    def test_respects_env_override(self):
+        with patch.dict(os.environ, {"CEREBRAS_MODEL": "custom-model"}, clear=True):
+            with patch("weave.merge.env.ensure_dotenv_loaded", return_value=None):
+                self.assertEqual(get_default_model(), "custom-model")
+
+    def test_cerebras_configured_needs_only_api_key(self):
+        with patch.dict(os.environ, {"CEREBRAS_API_KEY": "k"}, clear=True):
+            with patch("weave.merge.env.ensure_dotenv_loaded", return_value=None):
+                self.assertTrue(cerebras_configured())
+
+    def test_default_client_uses_default_model_when_unset(self):
+        with patch.dict(os.environ, {"CEREBRAS_API_KEY": "k"}, clear=True):
+            with patch(
+                "weave.merge.client.ensure_dotenv_loaded", return_value=None
+            ):
+                client = default_cerebras_client()
+        self.assertEqual(client._model, "zai-glm-4.7")
 
 
 class RepoRootTests(unittest.TestCase):

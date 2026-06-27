@@ -13,6 +13,7 @@ from weave.merge.env import (
     chat_completions_url,
     ensure_dotenv_loaded,
     get_default_base_url,
+    get_default_model,
     normalize_base_url,
 )
 from weave.merge.exceptions import MergeClientError
@@ -98,9 +99,7 @@ def default_cerebras_client() -> CerebrasClient:
     if not api_key:
         raise MergeClientError("CEREBRAS_API_KEY is not set")
 
-    model = os.environ.get("CEREBRAS_MODEL")
-    if not model:
-        raise MergeClientError("CEREBRAS_MODEL is not set")
+    model = get_default_model()
 
     timeout_raw = os.environ.get("WEAVE_MERGE_TIMEOUT_SECONDS")
     timeout_seconds: float | None = None

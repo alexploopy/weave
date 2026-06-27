@@ -12,7 +12,5 @@ from weave.merge.protocols import ContextMerger
 def default_merger(*, client: CerebrasClient | None = None) -> ContextMerger:
     """Return :class:`CerebrasMerger` when Cerebras env vars are configured."""
     if not cerebras_configured():
-        raise MergeClientError(
-            "CEREBRAS_API_KEY and CEREBRAS_MODEL are required for merge"
-        )
+        raise MergeClientError("CEREBRAS_API_KEY is required for merge")
     return CerebrasMerger(client=client)

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 _DEFAULT_BASE_URL = "https://api.cerebras.ai/v1"
+_DEFAULT_MODEL = "zai-glm-4.7"
 _USER_AGENT = "weave/0.1.0"
 USER_AGENT = _USER_AGENT
 
@@ -80,9 +81,13 @@ def chat_completions_url(base_url: str) -> str:
 
 
 def cerebras_configured() -> bool:
-    """Return True when required Cerebras env vars are present."""
+    """Return True when Cerebras is usable.
+
+    Only the API key is required; the model falls back to ``_DEFAULT_MODEL``
+    (see :func:`get_default_model`).
+    """
     ensure_dotenv_loaded()
-    return bool(os.environ.get("CEREBRAS_API_KEY") and os.environ.get("CEREBRAS_MODEL"))
+    return bool(os.environ.get("CEREBRAS_API_KEY"))
 
 
 def describe_cerebras_config() -> str:
@@ -98,7 +103,10 @@ def describe_cerebras_config() -> str:
         lines.append("CEREBRAS_API_KEY present=False")
 
     model = os.environ.get("CEREBRAS_MODEL")
-    lines.append(f"CEREBRAS_MODEL={model or '(not set)'}")
+    if model:
+        lines.append(f"CEREBRAS_MODEL={model}")
+    else:
+        lines.append(f"CEREBRAS_MODEL=(not set, default {_DEFAULT_MODEL})")
 
     base_url = os.environ.get("CEREBRAS_BASE_URL", _DEFAULT_BASE_URL)
     lines.append(f"CEREBRAS_BASE_URL={base_url}")
@@ -116,3 +124,9 @@ def describe_cerebras_config() -> str:
 def get_default_base_url() -> str:
     ensure_dotenv_loaded()
     return normalize_base_url(os.environ.get("CEREBRAS_BASE_URL", _DEFAULT_BASE_URL))
+
+
+def get_default_model() -> str:
+    """Resolve the Cerebras model, defaulting to ``_DEFAULT_MODEL`` when unset."""
+    ensure_dotenv_loaded()
+    return os.environ.get("CEREBRAS_MODEL") or _DEFAULT_MODEL
