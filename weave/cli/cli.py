@@ -15,12 +15,14 @@ def _build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("push", help="upload a local session to a remote")
-    sp.add_argument("remote")
+    sp.add_argument("remote", nargs="?", default=None,
+                    help="remote name (optional when only one is configured)")
     sp.add_argument("name")
     sp.add_argument("--session", required=True, dest="session_id")
 
     pl = sub.add_parser("pull", help="download a remote session locally")
-    pl.add_argument("remote")
+    pl.add_argument("remote", nargs="?", default=None,
+                    help="remote name (optional when only one is configured)")
     pl.add_argument("name")
 
     rm = sub.add_parser("remote", help="manage remotes")

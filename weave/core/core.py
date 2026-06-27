@@ -94,6 +94,25 @@ def remote_add(name, url, *, path=None):
     config.add_remote(name, url, path=path)
 
 
+def _resolve_remote(remote, *, path=None):
+    """Resolve which remote to act on, defaulting to the sole configured one.
+
+    When ``remote`` is given it is returned as-is. When it is ``None`` (caller
+    omitted it) and exactly one remote is configured, that remote's name is used
+    -- so a single-remote setup never has to name it. Zero or many configured
+    remotes make the choice ambiguous, which is a ``WeaveError``.
+    """
+    if remote is not None:
+        return remote
+    names = [name for name, _ in config.list_remotes(path=path)]
+    if len(names) == 1:
+        return names[0]
+    if not names:
+        raise WeaveError("no remote configured — run: weave remote add <name> <url>")
+    raise WeaveError(
+        f"multiple remotes configured ({', '.join(sorted(names))}); specify one")
+
+
 def _remote_url(remote, *, path=None):
     """Resolve a remote name to its url, as a WeaveError on failure.
 
@@ -137,10 +156,12 @@ def _rewrite_for_local(entries, new_id, cwd):
 def pull(remote, name, *, cwd=None, server=None, config_path=None):
     """Download `name` from `remote` (Supabase) into a fresh local session.
 
-    Pipeline: weave.remote.pull -> weave.transcript parse -> local id/cwd
-    rewrite -> connector write. Validates (unknown remote, transport failure, empty
-    history) and fails before any local write.
+    `remote` may be ``None`` to use the sole configured remote. Pipeline:
+    weave.remote.pull -> weave.transcript parse -> local id/cwd rewrite ->
+    connector write. Validates (unknown/ambiguous remote, transport failure,
+    empty history) and fails before any local write.
     """
+    remote = _resolve_remote(remote, path=config_path)
     url = _remote_url(remote, path=config_path)
     svr = server or _load_server()
     text = _remote_call(svr.pull, url, name, action="pull", target=f"{remote}/{name}")
@@ -157,9 +178,11 @@ def pull(remote, name, *, cwd=None, server=None, config_path=None):
 def push(remote, name, session_id, *, server=None, config_path=None):
     """Upload the local `session_id` to `remote` (Supabase) under `name`.
 
-    Bytes are sent as-is; all machine-specific rewriting happens on `pull`.
+    `remote` may be ``None`` to use the sole configured remote. Bytes are sent
+    as-is; all machine-specific rewriting happens on `pull`.
     """
     text = cc.read_text(session_id)            # SessionNotFound/Ambiguous propagate
+    remote = _resolve_remote(remote, path=config_path)
     url = _remote_url(remote, path=config_path)
     svr = server or _load_server()
     _remote_call(svr.push, url, name, text, action="push", target=f"{remote}/{name}")

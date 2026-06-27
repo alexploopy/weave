@@ -63,6 +63,27 @@ class ConfigTests(_WeaveBase):
         with self.assertRaises(core.WeaveError):
             _core_mod._remote_url("missing", path=self.cfg)
 
+    def test_resolve_remote_defaults_to_sole_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        self.assertEqual(
+            _core_mod._resolve_remote(None, path=self.cfg), "origin")
+
+    def test_resolve_remote_passthrough_when_named(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        core.remote_add("backup", "u@h:/b", path=self.cfg)
+        self.assertEqual(
+            _core_mod._resolve_remote("backup", path=self.cfg), "backup")
+
+    def test_resolve_remote_none_with_no_remotes_raises(self):
+        with self.assertRaises(core.WeaveError):
+            _core_mod._resolve_remote(None, path=self.cfg)
+
+    def test_resolve_remote_none_with_multiple_raises(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        core.remote_add("backup", "u@h:/b", path=self.cfg)
+        with self.assertRaises(core.WeaveError):
+            _core_mod._resolve_remote(None, path=self.cfg)
+
 
 class FakeServer:
     """In-memory stand-in for the `server` module, injected via `server=`."""
@@ -108,6 +129,21 @@ class PushTests(_WeaveBase):
             core.push("nope", "n", "sess-1",
                       server=FakeServer(), config_path=self.cfg)
 
+    def test_push_defaults_to_sole_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        self._seed_session("sess-1", '{"uuid":"x"}\n')
+        fake = FakeServer()
+        core.push(None, "auth-refactor", "sess-1",
+                  server=fake, config_path=self.cfg)
+        self.assertEqual(
+            fake.pushed, [("u@h:/p", "auth-refactor", '{"uuid":"x"}\n')])
+
+    def test_push_no_remote_arg_with_no_remotes_raises(self):
+        self._seed_session("sess-1", '{"uuid":"x"}\n')
+        with self.assertRaises(core.WeaveError):
+            core.push(None, "n", "sess-1",
+                      server=FakeServer(), config_path=self.cfg)
+
 
 class RewriteAndPullTests(_WeaveBase):
     def test_rewrite_for_local_sets_cwd_and_sessionid(self):
@@ -132,6 +168,13 @@ class RewriteAndPullTests(_WeaveBase):
         for e in entries:
             self.assertEqual(e["cwd"], self.cwd)
             self.assertEqual(e["sessionId"], new_id)
+
+    def test_pull_defaults_to_sole_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"): _VALID_ENTRY})
+        new_id = core.pull(None, "auth", cwd=self.cwd,
+                           server=fake, config_path=self.cfg)
+        self.assertTrue(cc.session_path(self.cwd, new_id).is_file())
 
     def test_pull_empty_history_raises_before_writing(self):
         core.remote_add("origin", "u@h:/p", path=self.cfg)

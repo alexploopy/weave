@@ -62,6 +62,18 @@ class CliTests(CliBase):
         self.assertEqual(rc, 0)
         self.assertEqual(len(core.ls(cwd=self.cwd)), 1)
 
+    def test_pull_without_remote_uses_sole_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"):
+            '{"parentUuid":null,"type":"user","uuid":"u1","cwd":"/a",'
+            '"sessionId":"s","timestamp":"2026-06-26T10:00:00.000Z",'
+            '"message":{"role":"user","content":"hi"}}\n'})
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["pull", "auth"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(core.ls(cwd=self.cwd)), 1)
+
     def test_unknown_remote_exits_1_with_message(self):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
