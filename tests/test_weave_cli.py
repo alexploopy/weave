@@ -136,6 +136,16 @@ class CliTests(CliBase):
         self.assertEqual(rendered["help"], rendered["--help"])
         self.assertEqual(rendered["help"], rendered["-h"])
 
+    def test_version_flag_prints_version(self):
+        from weave import __version__
+        for arg in ("--version", "-V"):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = cli.main([arg])
+            self.assertEqual(rc, 0)
+            self.assertIn(__version__, out.getvalue())
+            self.assertIn("weave", out.getvalue())
+
     def test_no_args_prints_help(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -172,9 +182,52 @@ class CliTests(CliBase):
 
     def test_remote_add_subcommand(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = cli.main(["remote", "add", "u@h:/p"])
+            rc = cli.main(["remote", "add", "origin", "u@h:/p"])
         self.assertEqual(rc, 0)
         self.assertEqual(config.get_remote("origin", path=self.cfg), "u@h:/p")
+
+    def test_remote_add_accepts_custom_name(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cli.main(["remote", "add", "backup", "u@h:/b"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(config.get_remote("backup", path=self.cfg), "u@h:/b")
+
+    def test_pull_open_flag_resumes_session(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"):
+            '{"parentUuid":null,"type":"user","uuid":"u1","cwd":"/a",'
+            '"sessionId":"s","timestamp":"2026-06-26T10:00:00.000Z",'
+            '"message":{"role":"user","content":"hi"}}\n'})
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake), \
+                mock.patch.object(cli.cli, "_open_session") as opened:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["pull", "auth", "-o"])
+        self.assertEqual(rc, 0)
+        opened.assert_called_once()
+
+    def test_pull_without_open_flag_does_not_resume(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"):
+            '{"parentUuid":null,"type":"user","uuid":"u1","cwd":"/a",'
+            '"sessionId":"s","timestamp":"2026-06-26T10:00:00.000Z",'
+            '"message":{"role":"user","content":"hi"}}\n'})
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake), \
+                mock.patch.object(cli.cli, "_open_session") as opened:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["pull", "auth"])
+        self.assertEqual(rc, 0)
+        opened.assert_not_called()
+
+    def test_merge_open_flag_resumes_session(self):
+        expected = _core_mod.MergeResult(
+            session_id="merged-123", jsonl_path="/tmp/merged-123.jsonl",
+            branch_point="bp", a_tail_len=1, b_tail_len=2)
+        with mock.patch.object(core, "merge", return_value=expected), \
+                mock.patch.object(cli.cli, "_open_session") as opened:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["merge", "/tmp/a.jsonl", "/tmp/b.jsonl", "--open"])
+        self.assertEqual(rc, 0)
+        opened.assert_called_once_with("merged-123")
 
     def test_merge_subcommand_prints_resume_hint(self):
         expected = _core_mod.MergeResult(

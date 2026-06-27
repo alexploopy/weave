@@ -25,6 +25,7 @@ Verify:
 
 ```bash
 weave --help
+weave --version    # prints the installed version (also: weave -V)
 ```
 
 ### Set up Supabase
@@ -122,17 +123,16 @@ Session names are scoped to the remote, so `auth-refactor` on one team's WeaveHu
 ### Commands
 
 
-| Command                         | Description                                                                                                                                          |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `weave remote add <name> <url>` | Register a WeaveHub remote (mirrors `git remote add`).                                                                                               |
-| `weave push origin <name>`      | Upload your current session to the WeaveHub.                                                                                                         |
-| `weave pull origin <name>`      | Download a named session from the WeaveHub and place it locally, rewriting `cwd` fields for your machine. Resume immediately with `claude --resume`. |
-| `weave fork <name>`             | Split your current session into two independent local copies. The original is preserved; the fork is yours to diverge.                               |
-| `weave merge <name>`            | Merge a pulled session into your current local session via Cerebras.                                                                                 |
-| `weave resume`                  | Shortcut for `weave pull` + `claude --resume` in one step.                                                                                           |
-| `weave ls origin`               | List available sessions on the WeaveHub.                                                                                                             |
-| `weave show <name>`             | Preview the distilled context for a session.                                                                                                         |
-
+| Command                                  | Description                                                                                                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `weave remote add <name> <url>`          | Register a WeaveHub remote (mirrors `git remote add`).                                                                                                                                               |
+| `weave push origin <name>`               | Upload your current session to the WeaveHub.                                                                                                                                                         |
+| `weave pull origin <name> [-o]`          | Download a named session from the WeaveHub and place it locally, rewriting `cwd` fields for your machine. Resume immediately with `claude --resume`, or pass `-o` / `--open` to resume automatically. |
+| `weave fork <name>`                      | Split your current session into two independent local copies. The original is preserved; the fork is yours to diverge.                                                                               |
+| `weave merge <source-a> <source-b> [-o]` | Merge two sessions into a new resumable session via Cerebras. Pass `-o` / `--open` to resume the merged session automatically.                                                                        |
+| `weave resume`                           | Shortcut for `weave pull` + `claude --resume` in one step.                                                                                                                                           |
+| `weave ls origin`                        | List available sessions on the WeaveHub.                                                                                                                                                             |
+| `weave show <name>`                      | Preview the distilled context for a session.                                                                                                                                                         |
 
 > **Note:** `weave merge` automatically snapshots your current session to the WeaveHub before making local changes. If the merge fails, your original session is untouched and recoverable.
 
@@ -145,8 +145,7 @@ Session names are scoped to the remote, so `auth-refactor` on one team's WeaveHu
 weave push origin auth-refactor
 
 # Engineer B pulls it and resumes as if it ran on their machine
-weave pull origin auth-refactor
-claude --resume
+weave pull origin auth-refactor -o    # -o / --open resumes automatically
 ```
 
 **Fork** — explore a different approach without losing the original:
@@ -168,8 +167,7 @@ weave push origin auth-refactor
 
 # Engineer B pulls and merges A's context into their own session
 weave pull origin auth-refactor
-weave merge auth-refactor
-claude --resume
+weave merge auth-refactor my-current-work -o   # -o / --open resumes the merged session
 ```
 
 ### Multiple sessions in the same directory

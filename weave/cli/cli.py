@@ -10,9 +10,10 @@ up bracketed there too.
 """
 
 import argparse
+import subprocess
 import sys
 
-from weave import core
+from weave import __version__, core
 from weave.merge.exceptions import MergeError
 
 _TAGLINE = "git for your Claude Code agent context"
@@ -39,11 +40,11 @@ _WEAVE_ART = (
 _HELP_GROUPS = [
     ("share agent context across sessions", [
         ("push [<remote>] <name> --session <id>", "Upload a local session to a remote"),
-        ("pull [<remote>] <name>", "Download a remote session locally"),
-        ("merge <source-a> <source-b>", "Merge two sessions into a new session"),
+        ("pull [<remote>] <name> [-o]", "Download a remote session locally"),
+        ("merge <source-a> <source-b> [-o]", "Merge two sessions into a new session"),
     ]),
     ("manage remotes and stored sessions", [
-        ("remote add <url>", "Register a remote"),
+        ("remote add <name> <url>", "Register a remote"),
         ("rm [<remote>] <name>", "Delete a session from a remote"),
         ("ls [<remote>]", "List local (or remote) sessions"),
     ]),
@@ -57,7 +58,9 @@ _HELP_NOTES = [
     "Arguments shown as [<...>] are optional; <...> are placeholders you fill in.",
     "'<remote>' may be omitted when exactly one remote is configured.",
     "Use '--session auto' to push the newest local session for this directory.",
+    "Add '-o' / '--open' to pull or merge to resume the session immediately with 'claude --resume'.",
     "Run 'weave <command> -h' to see the parameters for a single command.",
+    "Run 'weave --version' to print the installed version.",
 ]
 
 
@@ -103,6 +106,8 @@ def _build_parser():
     pl.add_argument("remote", nargs="?", default=None, metavar="<remote>",
                     help="remote name (optional when only one is configured)")
     pl.add_argument("name", metavar="<name>", help="name of the session on the remote")
+    pl.add_argument("-o", "--open", action="store_true", dest="open",
+                    help="open the session with 'claude --resume' after pulling")
 
     rmp = sub.add_parser("rm", help="delete a session from a remote",
                          description="Delete the session stored as <name> on a remote.")
@@ -114,7 +119,8 @@ def _build_parser():
                         description="Manage the remotes weave can push to and pull from.")
     rmsub = rm.add_subparsers(dest="remote_cmd", required=True, metavar="<subcommand>")
     rma = rmsub.add_parser("add", help="register a remote",
-                           description="Register a remote at <url>. Named 'origin' by default.")
+                           description="Register a remote named <name> at <url>.")
+    rma.add_argument("name", metavar="<name>", help="local name for the remote")
     rma.add_argument("url", metavar="<url>", help="remote url / connection string")
 
     lsp = sub.add_parser("ls", help="list local (or remote) sessions",
@@ -130,11 +136,26 @@ def _build_parser():
                     help="first session (id, name, path, or 'auto')")
     mg.add_argument("source_b", metavar="<source-b>",
                     help="second session (id, name, path, or 'auto')")
+    mg.add_argument("-o", "--open", action="store_true", dest="open",
+                    help="open the merged session with 'claude --resume' after merging")
 
     sub.add_parser("log", help="show local history of remote operations",
                    description="Show the local history of push / pull / rm operations.")
 
     return p
+
+
+def _open_session(session_id):
+    """Hand off to ``claude --resume <session_id>`` (the ``-o/--open`` flag).
+
+    Inherits the current terminal so the resumed session is interactive, and
+    falls back to printing the resume command when ``claude`` is not on PATH.
+    """
+    try:
+        subprocess.run(["claude", "--resume", session_id], check=False)
+    except FileNotFoundError:
+        print(f"weave: 'claude' not found on PATH; resume manually with: "
+              f"claude --resume {session_id}", file=sys.stderr)
 
 
 def main(argv=None):
@@ -143,6 +164,9 @@ def main(argv=None):
     # custom command reference and exit cleanly.
     if not argv or argv[0] in ("help", "-h", "--help"):
         sys.stdout.write(_render_help())
+        return 0
+    if argv[0] in ("--version", "-V"):
+        print(f"weave {__version__}")
         return 0
 
     parser = _build_parser()
@@ -154,12 +178,14 @@ def main(argv=None):
         elif args.cmd == "pull":
             new_id = core.pull(args.remote, args.name)
             print(f"pulled into {new_id}\n  resume: claude --resume {new_id}")
+            if args.open:
+                _open_session(new_id)
         elif args.cmd == "rm":
             remote = core.rm(args.remote, args.name)
             print(f"removed {remote}/{args.name}")
         elif args.cmd == "remote":
-            core.remote_add("origin", args.url)
-            print(f"remote 'origin' set")
+            core.remote_add(args.name, args.url)
+            print(f"remote {args.name!r} set")
         elif args.cmd == "ls":
             for sid in core.ls(args.remote):
                 print(sid)
@@ -167,6 +193,8 @@ def main(argv=None):
             result = core.merge(args.source_a, args.source_b)
             print(f"merged into {result.session_id}\n"
                   f"  resume: claude --resume {result.session_id}")
+            if args.open:
+                _open_session(result.session_id)
         elif args.cmd == "log":
             for e in core.log():
                 suffix = f" ({e['id']})" if e.get("id") else ""
