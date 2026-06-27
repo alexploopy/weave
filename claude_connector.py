@@ -9,6 +9,7 @@ Storage base honors $CLAUDE_CONFIG_DIR if set, else ~/.claude. Stdlib only.
 
 import os
 import re
+import tempfile
 from pathlib import Path
 
 _ENCODE_RE = re.compile(r"[^A-Za-z0-9]")
@@ -79,3 +80,27 @@ def read_text(session):
     if not path.is_file():
         raise SessionNotFound(f"no session file at {str(path)!r}")
     return path.read_text(encoding="utf-8")
+
+
+# --- bytes out ---------------------------------------------------------------
+def write_text(path, text):
+    """Atomically write `text` to `path`, creating parent dirs. Overwrites
+    unconditionally and writes the string exactly as given. Returns the path.
+
+    Atomic: a temp file in the same directory is written then os.replace()d
+    into place, so an interrupted write never leaves a half-written file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(
+        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return path

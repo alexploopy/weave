@@ -107,5 +107,36 @@ class ReadTests(_ConnectorBase):
             cc.read_text("dup")
 
 
+class WriteTests(_ConnectorBase):
+    def test_write_creates_parents_and_writes(self):
+        p = self.root() / "-Users-a-proj" / "new.jsonl"
+        ret = cc.write_text(p, "HELLO\n")
+        self.assertEqual(ret, Path(p))
+        self.assertEqual(p.read_text(encoding="utf-8"), "HELLO\n")
+
+    def test_write_overwrites_unconditionally(self):
+        p = self.root() / "-d" / "s.jsonl"
+        cc.write_text(p, "first")
+        cc.write_text(p, "second")
+        self.assertEqual(p.read_text(encoding="utf-8"), "second")
+
+    def test_write_is_byte_faithful_no_trailing_newline(self):
+        p = self.root() / "-d" / "s.jsonl"
+        cc.write_text(p, "no-newline")
+        self.assertEqual(p.read_text(encoding="utf-8"), "no-newline")
+
+    def test_write_leaves_no_temp_files(self):
+        p = self.root() / "-d" / "s.jsonl"
+        cc.write_text(p, "x")
+        self.assertEqual(
+            [f.name for f in p.parent.iterdir()], ["s.jsonl"])
+
+    def test_write_accepts_str_path(self):
+        p = self.root() / "-d" / "s.jsonl"
+        ret = cc.write_text(str(p), "y")
+        self.assertEqual(ret, p)
+        self.assertEqual(p.read_text(encoding="utf-8"), "y")
+
+
 if __name__ == "__main__":
     unittest.main()
