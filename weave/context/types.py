@@ -144,6 +144,7 @@ class ChatContext:
     model: str | None = None
     claude_version: str | None = None
     parent_session_id: str | None = None
+    source_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = _omit_none(
@@ -168,6 +169,7 @@ class ChatContext:
                 "model": self.model,
                 "claude_version": self.claude_version,
                 "parent_session_id": self.parent_session_id,
+                "source_path": self.source_path,
             }
         )
         d["git_branch"] = self.git_branch
@@ -199,4 +201,5 @@ class ChatContext:
             model=data.get("model"),
             claude_version=data.get("claude_version"),
             parent_session_id=data.get("parent_session_id"),
+            source_path=data.get("source_path"),
         )

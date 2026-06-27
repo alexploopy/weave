@@ -1,12 +1,13 @@
-"""argparse CLI for weave: push / pull / remote add / ls.
+"""argparse CLI for weave: push / pull / remote add / ls / merge.
 
-Thin marshalling over weave.core. (`merge` is deferred.)
+Thin marshalling over weave.core.
 """
 
 import argparse
 import sys
 
 from weave import core
+from weave.merge.exceptions import MergeError
 
 
 def _build_parser():
@@ -31,6 +32,11 @@ def _build_parser():
     lsp = sub.add_parser("ls", help="list local (or remote) sessions")
     lsp.add_argument("remote", nargs="?", default=None)
 
+    mg = sub.add_parser("merge", help="merge two session JSONL files via Cerebras")
+    mg.add_argument("source_a")
+    mg.add_argument("source_b")
+    mg.add_argument("--output-dir", default=None)
+
     return p
 
 
@@ -49,7 +55,12 @@ def main(argv=None):
         elif args.cmd == "ls":
             for sid in core.ls(args.remote):
                 print(sid)
-    except ValueError as e:
+        elif args.cmd == "merge":
+            result = core.merge_contexts(
+                args.source_a, args.source_b, output_dir=args.output_dir
+            )
+            print(result.sidecar_path)
+    except (ValueError, MergeError) as e:
         print(f"weave: {e}", file=sys.stderr)
         return 1
     return 0

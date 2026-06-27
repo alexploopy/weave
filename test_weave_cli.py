@@ -73,6 +73,31 @@ class CliTests(CliBase):
         self.assertEqual(rc, 0)
         self.assertEqual(core._remote_url("origin", path=self.cfg), "u@h:/p")
 
+    def test_merge_subcommand_prints_sidecar_path(self):
+        sidecar = self.tmp / "merged" / "test-merge.json"
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text("{}", encoding="utf-8")
+        expected = core.MergeResult(
+            merge_id="test-merge",
+            sidecar_path=str(sidecar),
+            source_a_path=str(self.tmp / "a.jsonl"),
+            source_b_path=str(self.tmp / "b.jsonl"),
+        )
+        with mock.patch.object(core, "merge_contexts", return_value=expected):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = cli.main(
+                    [
+                        "merge",
+                        str(self.tmp / "a.jsonl"),
+                        str(self.tmp / "b.jsonl"),
+                        "--output-dir",
+                        str(self.tmp / "merged"),
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue().strip(), str(sidecar))
+
 
 if __name__ == "__main__":
     unittest.main()

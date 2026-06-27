@@ -63,3 +63,40 @@ def minimal_merged_dict() -> dict:
 
 def minimal_merged() -> MergedContext:
     return MergedContext.from_dict(minimal_merged_dict())
+
+
+def merged_dict_for_contexts(
+    context_a: ChatContext, context_b: ChatContext
+) -> dict:
+    """Build a validator-passing MergedContext dict for distilled test contexts."""
+    return {
+        "schema_version": "1",
+        "merged_summary": f"{context_a.summary} | {context_b.summary}",
+        "decisions": [],
+        "conflicts": [],
+        "assumptions": [],
+        "unresolved_todos": [],
+        "file_refs": [],
+        "commands_to_rerun": [],
+        "tests_to_rerun": [],
+        "bootstrap_prompt": (
+            f"Resume merged work from {context_a.source_label} and "
+            f"{context_b.source_label}."
+        ),
+        "sources": [
+            {
+                "side": "a",
+                "source_label": context_a.source_label,
+                "session_id": context_a.session_id,
+                "git_branch": context_a.git_branch,
+                "leaf_uuid": context_a.leaf_uuid,
+            },
+            {
+                "side": "b",
+                "source_label": context_b.source_label,
+                "session_id": context_b.session_id,
+                "git_branch": context_b.git_branch,
+                "leaf_uuid": context_b.leaf_uuid,
+            },
+        ],
+    }

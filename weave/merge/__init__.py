@@ -2,6 +2,7 @@
 
 from weave.merge.cerebras import CerebrasMerger
 from weave.merge.exceptions import MergeClientError, MergeError, MergeResponseError
+from weave.merge.factory import default_merger
 from weave.merge.protocols import ContextMerger
 from weave.merge.stub import StubMerger
 from weave.merge.types import (
@@ -18,6 +19,7 @@ __all__ = [
     "CerebrasMerger",
     "Conflict",
     "ContextMerger",
+    "default_merger",
     "MergeClientError",
     "MergeError",
     "MergeResponseError",
