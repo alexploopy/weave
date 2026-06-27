@@ -58,5 +58,29 @@ class PathTests(_ConnectorBase):
         self.assertTrue(issubclass(cc.AmbiguousSession, ValueError))
 
 
+class ResolveTests(_ConnectorBase):
+    def test_resolve_none_when_absent(self):
+        self.assertIsNone(cc.resolve("missing-id"))
+
+    def test_resolve_single_match(self):
+        f = self.make("-Users-a-proj", "sess1")
+        self.assertEqual(cc.resolve("sess1"), f)
+
+    def test_resolve_ambiguous_raises(self):
+        self.make("-Users-a-proj", "dup")
+        self.make("-Users-b-proj", "dup")
+        with self.assertRaises(cc.AmbiguousSession):
+            cc.resolve("dup")
+
+    def test_list_sessions_enumerates_across_dirs(self):
+        self.make("-Users-a-proj", "s1")
+        self.make("-Users-b-proj", "s2")
+        got = dict(cc.list_sessions())
+        self.assertEqual(set(got), {"s1", "s2"})
+
+    def test_list_sessions_empty_when_no_root(self):
+        self.assertEqual(cc.list_sessions(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

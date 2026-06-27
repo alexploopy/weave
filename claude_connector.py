@@ -40,3 +40,26 @@ def encode_cwd(cwd):
 def session_path(cwd, session_id):
     """Where a session for `cwd` with id `session_id` lives on this machine."""
     return projects_root() / encode_cwd(cwd) / f"{session_id}.jsonl"
+
+
+# --- resolution / enumeration ------------------------------------------------
+def resolve(session_id):
+    """The path of the session with this id, or None. Raises AmbiguousSession
+    if the id exists in more than one project dir (e.g. after a copy)."""
+    matches = sorted(projects_root().glob(f"*/{session_id}.jsonl"))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        dirs = ", ".join(m.parent.name for m in matches)
+        raise AmbiguousSession(
+            f"session id {session_id!r} found in {len(matches)} project "
+            f"dirs: {dirs}")
+    return matches[0]
+
+
+def list_sessions():
+    """(session_id, path) for every session file under the root, sorted by
+    path. session_id is the filename stem."""
+    return sorted(
+        ((p.stem, p) for p in projects_root().glob("*/*.jsonl")),
+        key=lambda pair: str(pair[1]))
