@@ -82,5 +82,30 @@ class ResolveTests(_ConnectorBase):
         self.assertEqual(cc.list_sessions(), [])
 
 
+class ReadTests(_ConnectorBase):
+    def test_read_text_by_id(self):
+        self.make("-Users-a-proj", "sid", text='{"a":1}\n')
+        self.assertEqual(cc.read_text("sid"), '{"a":1}\n')
+
+    def test_read_text_by_path(self):
+        f = self.make("-Users-a-proj", "sid", text="LINE1\nLINE2\n")
+        self.assertEqual(cc.read_text(str(f)), "LINE1\nLINE2\n")
+
+    def test_read_text_missing_id_raises(self):
+        with self.assertRaises(cc.SessionNotFound):
+            cc.read_text("nope")
+
+    def test_read_text_missing_path_raises(self):
+        missing = self.root() / "-x" / "no.jsonl"
+        with self.assertRaises(cc.SessionNotFound):
+            cc.read_text(str(missing))
+
+    def test_read_text_ambiguous_id_propagates(self):
+        self.make("-Users-a-proj", "dup")
+        self.make("-Users-b-proj", "dup")
+        with self.assertRaises(cc.AmbiguousSession):
+            cc.read_text("dup")
+
+
 if __name__ == "__main__":
     unittest.main()

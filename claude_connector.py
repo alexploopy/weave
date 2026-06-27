@@ -63,3 +63,19 @@ def list_sessions():
     return sorted(
         ((p.stem, p) for p in projects_root().glob("*/*.jsonl")),
         key=lambda pair: str(pair[1]))
+
+
+# --- bytes in ----------------------------------------------------------------
+def read_text(session):
+    """Read a session's JSONL as text. `session` is a session id OR a path:
+    if it contains os.sep or ends with '.jsonl' it is treated as a path,
+    otherwise as a session id to resolve. Raises SessionNotFound if absent."""
+    if os.sep in session or session.endswith(".jsonl"):
+        path = Path(session)
+    else:
+        path = resolve(session)
+        if path is None:
+            raise SessionNotFound(f"no session with id {session!r}")
+    if not path.is_file():
+        raise SessionNotFound(f"no session file at {str(path)!r}")
+    return path.read_text(encoding="utf-8")
