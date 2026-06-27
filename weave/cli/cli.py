@@ -39,7 +39,7 @@ _WEAVE_ART = (
 # [<...>] marks an optional field, <...> a placeholder the user fills in.
 _HELP_GROUPS = [
     ("share agent context across sessions", [
-        ("push [<remote>] <name> --session <id>", "Upload a local session to a remote"),
+        ("push [<remote>] <name> [--session <id>]", "Upload a local session to a remote"),
         ("pull [<remote>] <name> [-o]", "Download a remote session locally"),
         ("merge <source-a> <source-b> [-o]", "Merge two sessions into a new session"),
     ]),
@@ -57,7 +57,7 @@ _HELP_GROUPS = [
 _HELP_NOTES = [
     "Arguments shown as [<...>] are optional; <...> are placeholders you fill in.",
     "'<remote>' may be omitted when exactly one remote is configured.",
-    "Use '--session auto' to push the newest local session for this directory.",
+    "push defaults to the newest local session; pass '--session <id>' to choose another.",
     "Add '-o' / '--open' to pull or merge to resume the session immediately with 'claude --resume'.",
     "Run 'weave <command> -h' to see the parameters for a single command.",
     "Run 'weave --version' to print the installed version.",
@@ -98,8 +98,8 @@ def _build_parser():
                     help="remote name (optional when only one is configured)")
     sp.add_argument("name", metavar="<name>",
                     help="name to store the session under on the remote")
-    sp.add_argument("--session", required=True, dest="session_id", metavar="<id>",
-                    help="local session id to upload, or 'auto' for the newest local session")
+    sp.add_argument("--session", default="auto", dest="session_id", metavar="<id>",
+                    help="local session id to upload (default: 'auto', the newest local session)")
 
     pl = sub.add_parser("pull", help="download a remote session locally",
                         description="Download <name> from a remote into a fresh local session.")

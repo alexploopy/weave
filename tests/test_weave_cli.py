@@ -166,6 +166,19 @@ class CliTests(CliBase):
         self.assertEqual(rc, 0)
         self.assertEqual(fake.store[("u@h:/p", "aname")], '{"uuid":"n"}\n')
 
+    def test_push_without_session_defaults_to_latest_local(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        cc.write_text(cc.session_path(self.cwd, "old"), '{"uuid":"o"}\n')
+        cc.write_text(cc.session_path(self.cwd, "new"), '{"uuid":"n"}\n')
+        os.utime(cc.session_path(self.cwd, "old"), (1_000, 1_000))
+        os.utime(cc.session_path(self.cwd, "new"), (2_000, 2_000))
+        fake = FakeServer()
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["push", "aname"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(fake.store[("u@h:/p", "aname")], '{"uuid":"n"}\n')
+
     def test_log_subcommand_lists_recorded_ops(self):
         core.remote_add("origin", "u@h:/p", path=self.cfg)
         cc.write_text(cc.session_path(self.cwd, "s1"), '{"uuid":"x"}\n')
