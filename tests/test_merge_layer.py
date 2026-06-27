@@ -74,6 +74,44 @@ class BuildMergePromptTests(unittest.TestCase):
         self.assertIn("none", prompt.lower())
         self.assertIn("A did this", prompt)
 
+    def test_drops_jsonl_envelope_metadata(self):
+        entries = [{
+            "type": "assistant", "uuid": "envelope-uuid-1",
+            "parentUuid": "envelope-uuid-0", "sessionId": "sess-xyz",
+            "cwd": "/some/where", "timestamp": "2026-06-27T00:00:00Z",
+            "message": {"role": "assistant", "content": [
+                {"type": "text", "text": "did the thing"},
+                {"type": "tool_use", "name": "Edit", "input": {"file": "a.py"}},
+            ]},
+        }]
+        prompt = build_merge_prompt(None, entries, [])
+        self.assertIn("assistant: did the thing", prompt)
+        self.assertIn("Edit", prompt)
+        # The heavy envelope fields must not leak into the prompt.
+        for leaked in ("envelope-uuid-1", "sessionId", "parentUuid",
+                       "timestamp", "/some/where"):
+            self.assertNotIn(leaked, prompt)
+
+    def test_tool_result_is_truncated(self):
+        big = "X" * 5000
+        entries = [{"message": {"role": "user", "content": [
+            {"type": "tool_result", "content": big}]}}]
+        prompt = build_merge_prompt(None, entries, [])
+        self.assertIn("elided", prompt)
+        self.assertNotIn("X" * 1000, prompt)  # full payload not sent
+
+    def test_lean_render_far_smaller_than_raw_dump(self):
+        import json
+        entries = [{
+            "type": "assistant", "uuid": "u", "sessionId": "s",
+            "timestamp": "t", "cwd": "/p",
+            "message": {"role": "assistant", "content": [
+                {"type": "tool_result", "content": "Y" * 4000}]},
+        }]
+        prompt = build_merge_prompt(None, entries, [])
+        raw = json.dumps(entries, indent=2)
+        self.assertLess(len(prompt), len(raw) // 4)
+
 
 if __name__ == "__main__":
     unittest.main()
