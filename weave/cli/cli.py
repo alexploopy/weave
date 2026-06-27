@@ -17,6 +17,22 @@ from weave.merge.exceptions import MergeError
 
 _TAGLINE = "git for your Claude Code agent context"
 
+_WEAVE_ART = (
+    "\033[33m"
+    "*%%*\n"
+    "                    =**+  %@%%\n"
+    "                    #@@%  %@@%\n"
+    "               :%%%=#@%%=%%%%%%%%.\n"
+    "               -%@%=%%@%=%@%@%@%@.\n"
+    "                    #@%%  -==-\n"
+    "                 +*******-%@%%:***:\n"
+    "                .%@%@@%@@=%@%%-@%@-\n"
+    "                 -=======:%@%%:===.\n"
+    "                    #@@%  +##+\n"
+    "                    *%%#"
+    "\033[0m"
+)
+
 # Git-style command reference for the top-level help: each group has a title and
 # a list of (signature, description). Signatures mirror the real argument order;
 # [<...>] marks an optional field, <...> a placeholder the user fills in.
@@ -49,19 +65,22 @@ def _render_help():
     """Build the git-like top-level help text (ends with a trailing newline)."""
     width = max(len(sig) for _, cmds in _HELP_GROUPS for sig, _ in cmds)
     lines = [
-        "usage: weave <command> [<args>]",
+        _WEAVE_ART,
+        "",
+        "\033[1;36musage:\033[0m weave <command> [<args>]",
         "",
         f"weave -- {_TAGLINE}.",
         "",
-        "These are the weave commands used in various situations:",
+        "\033[1mThese are the weave commands used in various situations:\033[0m",
         "",
     ]
     for title, cmds in _HELP_GROUPS:
-        lines.append(title)
+        lines.append(f"\033[1;32m{title}\033[0m")
         for sig, desc in cmds:
-            lines.append(f"   {sig.ljust(width)}  {desc}")
+            lines.append(f"   \033[1m{sig.ljust(width)}\033[0m  {desc}")
         lines.append("")
-    lines.extend(_HELP_NOTES)
+    for note in _HELP_NOTES:
+        lines.append(f"\033[2m{note}\033[0m")
     lines.append("")
     return "\n".join(lines)
 
