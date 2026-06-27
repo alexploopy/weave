@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import claude_connector_api as cc
-from weave import core
+from weave import config, core
 
 
 class _WeaveBase(unittest.TestCase):
@@ -31,18 +31,18 @@ class ConfigTests(_WeaveBase):
     def test_remote_add_writes_url(self):
         core.remote_add("origin", "user@host:/srv/weave", path=self.cfg)
         self.assertEqual(
-            core._remote_url("origin", path=self.cfg), "user@host:/srv/weave")
+            config.get_remote("origin", path=self.cfg), "user@host:/srv/weave")
 
     def test_remote_add_updates_existing(self):
         core.remote_add("origin", "user@host:/old", path=self.cfg)
         core.remote_add("origin", "user@host:/new", path=self.cfg)
         self.assertEqual(
-            core._remote_url("origin", path=self.cfg), "user@host:/new")
+            config.get_remote("origin", path=self.cfg), "user@host:/new")
 
     def test_unknown_remote_raises(self):
         core.remote_add("origin", "u@h:/p", path=self.cfg)
         with self.assertRaises(ValueError):
-            core._remote_url("missing", path=self.cfg)
+            config.get_remote("missing", path=self.cfg)
 
 
 class FakeServer:

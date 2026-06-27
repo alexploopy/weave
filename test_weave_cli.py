@@ -11,7 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from weave import cli, core
+from weave import cli, config, core
+from weave.config import config as _config_mod
 
 
 class FakeServer:
@@ -40,7 +41,7 @@ class CliBase(unittest.TestCase):
         self.cfg = self.tmp / ".weave" / "config"
         self.cwd = "/Users/tester/proj"
         # Redirect core defaults at their definition site.
-        for p in (mock.patch.object(core, "_DEFAULT_CONFIG", str(self.cfg)),
+        for p in (mock.patch.object(_config_mod, "DEFAULT_PATH", str(self.cfg)),
                   mock.patch.object(core.os, "getcwd", return_value=self.cwd)):
             p.start()
             self.addCleanup(p.stop)
@@ -71,7 +72,7 @@ class CliTests(CliBase):
         with contextlib.redirect_stdout(io.StringIO()):
             rc = cli.main(["remote", "add", "origin", "u@h:/p"])
         self.assertEqual(rc, 0)
-        self.assertEqual(core._remote_url("origin", path=self.cfg), "u@h:/p")
+        self.assertEqual(config.get_remote("origin", path=self.cfg), "u@h:/p")
 
 
 if __name__ == "__main__":
