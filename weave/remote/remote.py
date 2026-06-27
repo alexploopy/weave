@@ -56,7 +56,7 @@ def _client():
     except ImportError as e:  # pragma: no cover - exercised only without the dep
         raise ServerError(
             "the 'supabase' package is required for remote operations; "
-            "install it with 'pip install -r requirements.txt'") from e
+            "install it with 'pip install weave-sessions[remote]'") from e
 
     try:
         _client_cache = create_client(url, key)

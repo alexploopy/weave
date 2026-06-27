@@ -8,6 +8,29 @@ The name is `weave merge` but the primitive is broader: Claude Code sessions sho
 
 ---
 
+## Install
+
+**Development** (from a clone):
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS/Linux
+pip install -e ".[dev]"
+copy .env.example .env            # fill in CEREBRAS_* and SUPABASE_*
+```
+
+**Remote push/pull** requires the Supabase extra (`supabase>=2.0`, included in `[dev]`). Run the migration in [`supabase/migrations/0001_init_weave_sessions.sql`](supabase/migrations/0001_init_weave_sessions.sql) on your Supabase project, then set `SUPABASE_URL` and `SUPABASE_KEY` (service-role) in `.env`.
+
+Verify:
+
+```bash
+weave --help
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+---
+
 ## The problem
 
 Claude Code sessions are trapped on the machine that created them. When two developers work on separate problems, their conversational context lives in two separate JSONL files on separate machines. You cannot hand that context to a colleague without sending a raw transcript they have to read, understand, and re-explain to their own Claude session. You cannot pick up where a teammate left off. You cannot split a session into two parallel explorations. You cannot carry another engineer's full reasoning — thinking blocks, failed attempts, tool results — onto your own machine and just keep going.

@@ -8,7 +8,8 @@ from pathlib import Path
 
 from weave.context.distill import distill_from_jsonl
 
-_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "merge"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_FIXTURES = _REPO_ROOT / "fixtures" / "merge"
 
 
 class DistillFromJsonlTests(unittest.TestCase):

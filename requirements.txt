@@ -1,6 +1,1 @@
-# weave runtime dependencies.
-#
-# The core engine (weave.transcript, weave.connector, weave.core) is stdlib
-# only. The single third-party dependency is the Supabase client, used by
-# weave.remote for the remote push/pull/list transport.
-supabase>=2.0
+-e ".[dev]"

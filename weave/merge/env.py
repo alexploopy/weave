@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from weave import __version__
+
 _DEFAULT_BASE_URL = "https://api.cerebras.ai/v1"
 _DEFAULT_MODEL = "zai-glm-4.7"
-_USER_AGENT = "weave/0.1.0"
-USER_AGENT = _USER_AGENT
+USER_AGENT = f"weave/{__version__}"
 
 _dotenv_loaded = False
 
@@ -42,13 +43,23 @@ def load_dotenv_file(path: Path, *, override: bool = False) -> bool:
     return True
 
 
+def _dotenv_candidates() -> list[Path]:
+    candidates = [Path.cwd() / ".env"]
+    env_file = os.environ.get("WEAVE_ENV_FILE")
+    if env_file:
+        candidates.append(Path(env_file))
+    if os.environ.get("WEAVE_ENV") == "development":
+        candidates.append(repo_root() / ".env")
+    return candidates
+
+
 def ensure_dotenv_loaded() -> Path | None:
-    """Load the first ``.env`` found in cwd or repo root (once per process)."""
+    """Load the first ``.env`` found in cwd or ``WEAVE_ENV_FILE`` (once per process)."""
     global _dotenv_loaded
     if _dotenv_loaded:
         return _loaded_dotenv_path()
 
-    for candidate in (Path.cwd() / ".env", repo_root() / ".env"):
+    for candidate in _dotenv_candidates():
         if load_dotenv_file(candidate):
             _dotenv_loaded = True
             return candidate
@@ -58,7 +69,7 @@ def ensure_dotenv_loaded() -> Path | None:
 
 
 def _loaded_dotenv_path() -> Path | None:
-    for candidate in (Path.cwd() / ".env", repo_root() / ".env"):
+    for candidate in _dotenv_candidates():
         if candidate.is_file():
             return candidate
     return None

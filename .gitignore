@@ -59,6 +59,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Weave local state
+.weave/merged/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
