@@ -45,6 +45,15 @@ class EntryKeyTests(unittest.TestCase):
                           "input": {"file_path": "x"}}]}}
         self.assertEqual(_core._entry_key(a), _core._entry_key(b))
 
+    def test_tool_result_ids_are_ignored(self):
+        a = {"type": "user", "uuid": "1", "message": {"role": "user",
+             "content": [{"type": "tool_result", "tool_use_id": "toolu_AAA",
+                          "content": "same output"}]}}
+        b = {"type": "user", "uuid": "2", "message": {"role": "user",
+             "content": [{"type": "tool_result", "tool_use_id": "toolu_BBB",
+                          "content": "same output"}]}}
+        self.assertEqual(_core._entry_key(a), _core._entry_key(b))
+
 
 class SplitAtBranchTests(unittest.TestCase):
     def test_shared_then_branch(self):
@@ -78,6 +87,20 @@ class SplitAtBranchTests(unittest.TestCase):
         self.assertEqual(bp, "a2")
         self.assertEqual(a_tail, [])
         self.assertEqual(b_tail, [])
+
+    def test_no_dangling_tool_use_at_branch_point(self):
+        tool_a = {"type": "assistant", "uuid": "a2", "message": {"role": "assistant",
+                  "content": [{"type": "tool_use", "id": "toolu_X", "name": "Read",
+                               "input": {"file_path": "x"}}]}}
+        tool_b = {"type": "assistant", "uuid": "b2", "message": {"role": "assistant",
+                  "content": [{"type": "tool_use", "id": "toolu_Y", "name": "Read",
+                               "input": {"file_path": "x"}}]}}
+        a = [_user("a1", "shared"), tool_a, _user("a3", "A-only")]
+        b = [_user("b1", "shared"), tool_b, _user("b3", "B-only")]
+        bp, a_tail, b_tail = _core._split_at_branch(a, b)
+        self.assertEqual(bp, "a1")
+        self.assertEqual([e["uuid"] for e in a_tail], ["a2", "a3"])
+        self.assertEqual([e["uuid"] for e in b_tail], ["b2", "b3"])
 
 
 if __name__ == "__main__":
