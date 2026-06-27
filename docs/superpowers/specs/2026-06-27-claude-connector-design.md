@@ -1,4 +1,4 @@
-# Claude Code connector (`claude_connector.py`) — design
+# Claude Code connector (`claude_connector_api.py`) — design
 
 **Date:** 2026-06-27
 **Status:** Approved design, ready for implementation planning
@@ -21,7 +21,7 @@ The connector is what lets higher layers act on *real* sessions.
 weave (orchestrator — NOT in this spec)
    │   owns ALL logic: cwd/sessionId rewrite, session-id choice,
    │   fork / merge / handoff semantics
-   ├── claude_connector   ── dumb I/O: session-id ↔ path, read bytes, write bytes
+   ├── claude_connector_api   ── dumb I/O: session-id ↔ path, read bytes, write bytes
    └── transcript core     ── pure in-memory entry editing (already built)
 ```
 
@@ -87,12 +87,12 @@ so callers can `except ValueError` for "any connector error."
 ## 7. How weave composes it (illustrative; not implemented here)
 
 ```python
-text    = claude_connector.read_text(src_id)              # connector
+text    = claude_connector_api.read_text(src_id)              # connector
 entries = transcript_api.from_text(text)                  # core
 # ... weave rewrites cwd / sessionId, picks a new id ...
 out     = transcript_api.to_text(entries)                 # core
-path    = claude_connector.session_path(local_cwd, new_id)  # connector
-claude_connector.write_text(path, out)                    # connector
+path    = claude_connector_api.session_path(local_cwd, new_id)  # connector
+claude_connector_api.write_text(path, out)                    # connector
 ```
 
 ## 8. Testing strategy
@@ -118,7 +118,7 @@ test style.
    lives in weave.
 3. **Currency:** raw text + paths (no dependency on the transcript core).
 4. **Duplicate id on `resolve`:** raise `AmbiguousSession` (do not silently pick one).
-5. **Module name:** `claude_connector.py`.
+5. **Module name:** `claude_connector_api.py`.
 
 ## 10. Future considerations (not now)
 
