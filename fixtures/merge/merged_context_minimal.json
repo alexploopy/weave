@@ -1,0 +1,42 @@
+{
+  "_comment": "Minimal MergedContext example for synthesizer/writer teammate.",
+  "schema_version": "1",
+  "merged_summary": "Both sessions explored auth; agree on JWT httpOnly cookies and pytest coverage.",
+  "decisions": [
+    {
+      "text": "Use JWT in httpOnly cookies",
+      "sources": ["a", "b"]
+    }
+  ],
+  "conflicts": [],
+  "assumptions": ["Local Postgres on port 5432"],
+  "unresolved_todos": [
+    {"text": "Add refresh token rotation", "status": "open"}
+  ],
+  "file_refs": [
+    {"path": "src/auth.py", "action": "edit"}
+  ],
+  "commands_to_rerun": [
+    {"command": "pytest tests/test_auth.py", "outcome": "unknown"}
+  ],
+  "tests_to_rerun": [
+    {"name": "test_auth", "outcome": "unknown"}
+  ],
+  "bootstrap_prompt": "Resume merged auth work. JWT lives in httpOnly cookies. Run pytest tests/test_auth.py, then implement refresh token rotation.",
+  "sources": [
+    {
+      "side": "a",
+      "source_label": "session-a",
+      "session_id": "sess-a-001",
+      "git_branch": "feature-auth",
+      "leaf_uuid": "uuid-a-leaf"
+    },
+    {
+      "side": "b",
+      "source_label": "session-b",
+      "session_id": "sess-b-002",
+      "git_branch": "feature-auth",
+      "leaf_uuid": "uuid-b-leaf"
+    }
+  ]
+}
