@@ -18,7 +18,7 @@ pipx ensurepath      # one-time
 
 git clone https://github.com/alexploopy/weave.git
 cd weave
-pipx install ".[dev]"
+pipx install -e ".[dev]"
 ```
 
 Verify:
@@ -30,7 +30,7 @@ weave --help
 ### Set up Supabase
 
 Weave stores sessions in Supabase. Create a project, then run the migration in
-[`supabase/migrations/0001_init_weave_sessions.sql`](supabase/migrations/0001_init_weave_sessions.sql)
+`[supabase/migrations/0001_init_weave_sessions.sql](supabase/migrations/0001_init_weave_sessions.sql)`
 in the Supabase SQL editor.
 
 Copy `.env.example` to `.env` and fill in your keys:
@@ -83,13 +83,15 @@ weave merge <session-a> <session-b>
 
 ### Stages
 
-| Stage | Description |
-|-------|-------------|
-| **Parse** | Reads JSONL files into typed records (`user`, `assistant`, thinking blocks, `tool_use`, `tool_result`) and ignores the rest. |
-| **Distill** | Normalizes sessions into a `ChatContext` capturing intent, assistant decisions, thinking blocks, tool interactions, failures, and unresolved points. |
-| **Merge** | Prompts Cerebras with both distilled contexts to return a unified conversation thread that preserves reasoning, deduplicates tool calls, and flags conflicts. |
-| **Write** | Places the merged JSONL in `~/.claude/projects/<cwd>/` with corrected `cwd` fields. Every record's `cwd` field is rewritten from the source engineer's encoded path (e.g. `-Users-alice-myapp`) to the local machine's encoded path (e.g. `-Users-bob-myapp`). Without this rewrite, `claude --resume` silently starts a fresh session instead of picking up the merged context. |
-| **Reprompt loop** | Re-runs failed or rejected merges using feedback, passing the prior attempt and feedback back to Cerebras. |
+
+| Stage             | Description                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Parse**         | Reads JSONL files into typed records (`user`, `assistant`, thinking blocks, `tool_use`, `tool_result`) and ignores the rest.                                                                                                                                                                                                                                                     |
+| **Distill**       | Normalizes sessions into a `ChatContext` capturing intent, assistant decisions, thinking blocks, tool interactions, failures, and unresolved points.                                                                                                                                                                                                                             |
+| **Merge**         | Prompts Cerebras with both distilled contexts to return a unified conversation thread that preserves reasoning, deduplicates tool calls, and flags conflicts.                                                                                                                                                                                                                    |
+| **Write**         | Places the merged JSONL in `~/.claude/projects/<cwd>/` with corrected `cwd` fields. Every record's `cwd` field is rewritten from the source engineer's encoded path (e.g. `-Users-alice-myapp`) to the local machine's encoded path (e.g. `-Users-bob-myapp`). Without this rewrite, `claude --resume` silently starts a fresh session instead of picking up the merged context. |
+| **Reprompt loop** | Re-runs failed or rejected merges using feedback, passing the prior attempt and feedback back to Cerebras.                                                                                                                                                                                                                                                                       |
+
 
 ---
 
@@ -119,16 +121,18 @@ Session names are scoped to the remote, so `auth-refactor` on one team's WeaveHu
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `weave remote add <name> <url>` | Register a WeaveHub remote (mirrors `git remote add`). |
-| `weave push origin <name>` | Upload your current session to the WeaveHub. |
-| `weave pull origin <name>` | Download a named session from the WeaveHub and place it locally, rewriting `cwd` fields for your machine. Resume immediately with `claude --resume`. |
-| `weave fork <name>` | Split your current session into two independent local copies. The original is preserved; the fork is yours to diverge. |
-| `weave merge <name>` | Merge a pulled session into your current local session via Cerebras. |
-| `weave resume` | Shortcut for `weave pull` + `claude --resume` in one step. |
-| `weave ls origin` | List available sessions on the WeaveHub. |
-| `weave show <name>` | Preview the distilled context for a session. |
+
+| Command                         | Description                                                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `weave remote add <name> <url>` | Register a WeaveHub remote (mirrors `git remote add`).                                                                                               |
+| `weave push origin <name>`      | Upload your current session to the WeaveHub.                                                                                                         |
+| `weave pull origin <name>`      | Download a named session from the WeaveHub and place it locally, rewriting `cwd` fields for your machine. Resume immediately with `claude --resume`. |
+| `weave fork <name>`             | Split your current session into two independent local copies. The original is preserved; the fork is yours to diverge.                               |
+| `weave merge <name>`            | Merge a pulled session into your current local session via Cerebras.                                                                                 |
+| `weave resume`                  | Shortcut for `weave pull` + `claude --resume` in one step.                                                                                           |
+| `weave ls origin`               | List available sessions on the WeaveHub.                                                                                                             |
+| `weave show <name>`             | Preview the distilled context for a session.                                                                                                         |
+
 
 > **Note:** `weave merge` automatically snapshots your current session to the WeaveHub before making local changes. If the merge fails, your original session is untouched and recoverable.
 
@@ -186,16 +190,18 @@ All runtime code lives under the `weave/` package. Each module is a directory
 with an `__init__.py` defining its public surface over private implementation
 files, and each is independently testable.
 
-| Module | Responsibility | Depends on |
-|--------|---------------|------------|
-| `weave.cli` | Argument parsing and CLI marshalling. | `weave.core` |
-| `weave.core` | Orchestrates push/pull/fork/merge; owns all machine-specific policy (id choice, cwd/sessionId rewrite). | all |
-| `weave.connector` | Local-filesystem byte I/O: session id ↔ `~/.claude` JSONL path. | — |
-| `weave.transcript` | Linear CRUD over a transcript's active branch (`api`) over a private linearize/serialize engine (`engine`). | — |
-| `weave.remote` | Supabase-backed byte transport (`push` / `pull` / `list`), keyed by `(url, name)`. | — |
-| `weave.config` | Resolves `.weave/config` remotes. | — |
-| `weave.context` | Parses Claude JSONL into a `ChatContext` and distills it. | — |
-| `weave.merge` | Cerebras client, prompt building, response parsing, and validation. | `weave.context` |
+
+| Module             | Responsibility                                                                                              | Depends on      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | --------------- |
+| `weave.cli`        | Argument parsing and CLI marshalling.                                                                       | `weave.core`    |
+| `weave.core`       | Orchestrates push/pull/fork/merge; owns all machine-specific policy (id choice, cwd/sessionId rewrite).     | all             |
+| `weave.connector`  | Local-filesystem byte I/O: session id ↔ `~/.claude` JSONL path.                                             | —               |
+| `weave.transcript` | Linear CRUD over a transcript's active branch (`api`) over a private linearize/serialize engine (`engine`). | —               |
+| `weave.remote`     | Supabase-backed byte transport (`push` / `pull` / `list`), keyed by `(url, name)`.                          | —               |
+| `weave.config`     | Resolves `.weave/config` remotes.                                                                           | —               |
+| `weave.context`    | Parses Claude JSONL into a `ChatContext` and distills it.                                                   | —               |
+| `weave.merge`      | Cerebras client, prompt building, response parsing, and validation.                                         | `weave.context` |
+
 
 ### Project layout
 
@@ -210,12 +216,14 @@ supabase/      # remote-transport schema migrations
 
 ## Error handling
 
-| Case | Behavior |
-|------|----------|
-| Unparseable model output | Surfaces the raw output for inspection instead of writing a broken JSONL file. If the user rejects a merge result, re-runs with that feedback passed back to Cerebras. |
-| No chat history | Warns the user and exits before modifying files. |
-| Cerebras unreachable / no API key | Throws a clear error and exits before touching the local session. |
-| Merge failure | Local session remains untouched; original state is recoverable via the WeaveHub snapshot. |
+
+| Case                              | Behavior                                                                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unparseable model output          | Surfaces the raw output for inspection instead of writing a broken JSONL file. If the user rejects a merge result, re-runs with that feedback passed back to Cerebras. |
+| No chat history                   | Warns the user and exits before modifying files.                                                                                                                       |
+| Cerebras unreachable / no API key | Throws a clear error and exits before touching the local session.                                                                                                      |
+| Merge failure                     | Local session remains untouched; original state is recoverable via the WeaveHub snapshot.                                                                              |
+
 
 ---
 
@@ -231,9 +239,11 @@ The plumbing is genuinely end-to-end (real JSONL, real Cerebras), but the demo r
 
 ## Configuration
 
-| Variable | Purpose |
-|----------|---------|
+
+| Variable           | Purpose                                                        |
+| ------------------ | -------------------------------------------------------------- |
 | `CEREBRAS_API_KEY` | Authentication for Cerebras inference (OpenAI-compatible API). |
+
 
 ---
 
