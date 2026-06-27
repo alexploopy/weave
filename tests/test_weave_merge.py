@@ -3,9 +3,17 @@
 Run (from repo root):  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_weave_merge.py -q
 """
 
+import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
+from weave import connector as cc
+from weave import core
 from weave.core import core as _core
+from weave.merge.briefing import StubBriefingMerger
 
 
 def _user(uuid, text, *, sid="s", cwd="/a", ts="2026-06-26T10:00:00.000Z"):
@@ -101,6 +109,125 @@ class SplitAtBranchTests(unittest.TestCase):
         self.assertEqual(bp, "a1")
         self.assertEqual([e["uuid"] for e in a_tail], ["a2", "a3"])
         self.assertEqual([e["uuid"] for e in b_tail], ["b2", "b3"])
+
+
+_VALID_A = (
+    '{"parentUuid":null,"type":"user","uuid":"u1","sessionId":"sA","cwd":"/src",'
+    '"timestamp":"2026-06-26T10:00:00.000Z",'
+    '"message":{"role":"user","content":"shared question"}}\n'
+    '{"parentUuid":"u1","type":"assistant","uuid":"u2","sessionId":"sA","cwd":"/src",'
+    '"timestamp":"2026-06-26T10:00:01.000Z",'
+    '"message":{"role":"assistant","content":[{"type":"text","text":"shared answer"}]}}\n'
+    '{"parentUuid":"u2","type":"user","uuid":"u3","sessionId":"sA","cwd":"/src",'
+    '"timestamp":"2026-06-26T10:00:02.000Z",'
+    '"message":{"role":"user","content":"A branch work"}}\n'
+)
+_VALID_B = (
+    '{"parentUuid":null,"type":"user","uuid":"v1","sessionId":"sB","cwd":"/other",'
+    '"timestamp":"2026-06-27T09:00:00.000Z",'
+    '"message":{"role":"user","content":"shared question"}}\n'
+    '{"parentUuid":"v1","type":"assistant","uuid":"v2","sessionId":"sB","cwd":"/other",'
+    '"timestamp":"2026-06-27T09:00:01.000Z",'
+    '"message":{"role":"assistant","content":[{"type":"text","text":"shared answer"}]}}\n'
+    '{"parentUuid":"v2","type":"user","uuid":"v3","sessionId":"sB","cwd":"/other",'
+    '"timestamp":"2026-06-27T09:00:02.000Z",'
+    '"message":{"role":"user","content":"B branch work"}}\n'
+)
+
+
+class _MergeBase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cwd = "/Users/tester/proj"
+        self.a_path = Path(self.tmp) / "a.jsonl"
+        self.b_path = Path(self.tmp) / "b.jsonl"
+        self.a_path.write_text(_VALID_A, encoding="utf-8")
+        self.b_path.write_text(_VALID_B, encoding="utf-8")
+        # Redirect the connector's ~/.claude root into the temp dir.
+        patcher = mock.patch.dict(
+            os.environ, {"CLAUDE_CONFIG_DIR": self.tmp}, clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _written_entries(self, result):
+        text = Path(result.jsonl_path).read_text(encoding="utf-8")
+        return [json.loads(l) for l in text.splitlines() if l.strip()]
+
+
+class MergeWritesResumableSessionTests(_MergeBase):
+    def test_shared_prefix_preserved_and_read_cycle_spliced(self):
+        result = core.merge(str(self.a_path), str(self.b_path),
+                            cwd=self.cwd, merger=StubBriefingMerger())
+        entries = self._written_entries(result)
+
+        # Shared prefix (2 turns) preserved verbatim by content.
+        self.assertEqual(entries[0]["message"]["content"], "shared question")
+        self.assertEqual(entries[1]["message"]["content"][0]["text"], "shared answer")
+
+        # Exactly one Read tool_use carrying the stub briefing in its result.
+        tool_uses = [b for e in entries
+                     for b in (e.get("message", {}).get("content") or [])
+                     if isinstance(b, dict) and b.get("type") == "tool_use"]
+        self.assertEqual(len(tool_uses), 1)
+        self.assertEqual(tool_uses[0]["name"], "Read")
+        results = [b for e in entries
+                   for b in (e.get("message", {}).get("content") or [])
+                   if isinstance(b, dict) and b.get("type") == "tool_result"]
+        self.assertIn("MERGED SESSION BRIEFING", results[0]["content"])
+
+        # A's branch turn ("A branch work") is gone from the transcript.
+        texts = json.dumps(entries)
+        self.assertNotIn("A branch work", texts)
+        self.assertNotIn("B branch work", texts)
+
+    def test_identity_rewritten_for_local_machine(self):
+        result = core.merge(str(self.a_path), str(self.b_path),
+                            cwd=self.cwd, merger=StubBriefingMerger())
+        entries = self._written_entries(result)
+        for e in entries:
+            self.assertEqual(e["cwd"], self.cwd)
+            self.assertEqual(e["sessionId"], result.session_id)
+        # File lives under the encoded cwd for this machine.
+        self.assertEqual(Path(result.jsonl_path).stem, result.session_id)
+
+    def test_result_reports_branch_lengths(self):
+        result = core.merge(str(self.a_path), str(self.b_path),
+                            cwd=self.cwd, merger=StubBriefingMerger())
+        self.assertEqual(result.a_tail_len, 1)
+        self.assertEqual(result.b_tail_len, 1)
+        self.assertIsNotNone(result.branch_point)
+
+
+class MergeErrorTests(_MergeBase):
+    def test_identical_sessions_raise(self):
+        self.b_path.write_text(_VALID_A, encoding="utf-8")
+        with self.assertRaises(core.WeaveError):
+            core.merge(str(self.a_path), str(self.b_path),
+                       cwd=self.cwd, merger=StubBriefingMerger())
+
+    def test_missing_source_raises_weave_error(self):
+        with self.assertRaises(core.WeaveError):
+            core.merge(str(Path(self.tmp) / "nope.jsonl"), str(self.b_path),
+                       cwd=self.cwd, merger=StubBriefingMerger())
+
+    def test_empty_shared_prefix_yields_only_read_cycle(self):
+        self.a_path.write_text(
+            '{"parentUuid":null,"type":"user","uuid":"x1","sessionId":"sA",'
+            '"cwd":"/src","timestamp":"2026-06-26T10:00:00.000Z",'
+            '"message":{"role":"user","content":"A unique start"}}\n',
+            encoding="utf-8")
+        self.b_path.write_text(
+            '{"parentUuid":null,"type":"user","uuid":"y1","sessionId":"sB",'
+            '"cwd":"/other","timestamp":"2026-06-27T09:00:00.000Z",'
+            '"message":{"role":"user","content":"B unique start"}}\n',
+            encoding="utf-8")
+        result = core.merge(str(self.a_path), str(self.b_path),
+                            cwd=self.cwd, merger=StubBriefingMerger())
+        self.assertIsNone(result.branch_point)
+        entries = self._written_entries(result)
+        # Only the Read cycle remains (assistant tool_use + user tool_result).
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["type"], "assistant")
 
 
 if __name__ == "__main__":

@@ -7,8 +7,10 @@ from this package (``from weave import core``) for the stable surface.
 
 from weave.core.core import (
     MergeResult,
+    MergedSession,
     WeaveError,
     ls,
+    merge,
     merge_contexts,
     pull,
     push,
@@ -17,8 +19,10 @@ from weave.core.core import (
 
 __all__ = [
     "MergeResult",
+    "MergedSession",
     "WeaveError",
     "ls",
+    "merge",
     "merge_contexts",
     "pull",
     "push",

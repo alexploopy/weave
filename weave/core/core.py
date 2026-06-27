@@ -100,6 +100,15 @@ class MergeResult:
     jsonl_path: str | None = None
 
 
+@dataclass(frozen=True)
+class MergedSession:
+    session_id: str
+    jsonl_path: str
+    branch_point: str | None
+    a_tail_len: int
+    b_tail_len: int
+
+
 # --- config ------------------------------------------------------------------
 def remote_add(name, url, *, path=None):
     config.add_remote(name, url, path=path)
@@ -283,4 +292,74 @@ def merge_contexts(
         source_a_path=source_a_path,
         source_b_path=source_b_path,
         jsonl_path=None,
+    )
+
+
+def _read_source(source):
+    """Read a session's JSONL by id or path, mapping connector errors to WeaveError."""
+    try:
+        return cc.read_text(source)
+    except ValueError as exc:
+        raise WeaveError(str(exc)) from exc
+
+
+def _distill_shared(a_entries, branch_point, source_path):
+    """Distill the shared-prefix sub-document into a ChatContext (None if empty)."""
+    if branch_point is None:
+        return None
+    idx = next(i for i, e in enumerate(a_entries) if e.get("uuid") == branch_point)
+    shared_text = tx.to_text(a_entries[: idx + 1])
+    try:
+        return distill_from_jsonl(
+            shared_text, source_label="shared", source_path=str(source_path)
+        ).context
+    except ValueError as exc:
+        raise WeaveError(str(exc)) from exc
+
+
+def merge(source_a, source_b, *, cwd=None, merger=None):
+    """Merge two sessions into a new resumable cloned session.
+
+    Detects the shared content prefix, asks the merge layer for one briefing
+    document unifying the divergent branches, then clones source A: drops A's
+    branch and splices in a synthetic Read tool cycle whose result holds the
+    briefing. Identity is rewritten for the local machine and the clone is
+    written under ~/.claude. Both sources are left untouched.
+    """
+    a = tx.from_text(_read_source(source_a))
+    b = tx.from_text(_read_source(source_b))
+    if not a and not b:
+        raise WeaveError("no chat history in either session")
+
+    branch_point, a_tail, b_tail = _split_at_branch(a, b)
+    if not a_tail and not b_tail:
+        raise WeaveError("sessions are identical; nothing to merge")
+
+    shared_ctx = _distill_shared(a, branch_point, source_a)
+
+    from weave.merge.briefing import default_briefing_merger
+    active = merger or default_briefing_merger()
+    briefing = active.merge(shared_ctx, a_tail, b_tail)   # MergeError propagates; nothing written yet
+
+    entries = list(a)
+    if a_tail:
+        entries, _ = tx.delete_between(entries, a_tail[0]["uuid"], a[-1]["uuid"])
+    spec = {
+        "type": "tool_call", "name": "Read",
+        "input": {"file_path": "weave-merged-context"},
+        "result": briefing,
+    }
+    if branch_point is None:
+        entries, _ = tx.create_at_start(entries, spec)
+    else:
+        entries, _ = tx.create_after(entries, branch_point, spec)
+
+    new_id = _new_id()
+    cwd = cwd or os.getcwd()
+    entries = _rewrite_for_local(entries, new_id, cwd)
+    path = cc.session_path(cwd, new_id)
+    cc.write_text(path, tx.to_text(entries))
+    return MergedSession(
+        session_id=new_id, jsonl_path=str(path), branch_point=branch_point,
+        a_tail_len=len(a_tail), b_tail_len=len(b_tail),
     )
