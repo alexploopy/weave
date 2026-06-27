@@ -39,6 +39,53 @@ _COMPATIBILITY_NOTE = (
     "MergedContext sidecar only; Claude resume compatibility is unverified."
 )
 
+_VOLATILE_BLOCK_KEYS = ("id", "tool_use_id")
+
+
+def _strip_volatile(value):
+    """Recursively drop volatile id fields so content compares across machines."""
+    if isinstance(value, dict):
+        return {k: _strip_volatile(v) for k, v in value.items()
+                if k not in _VOLATILE_BLOCK_KEYS}
+    if isinstance(value, list):
+        return [_strip_volatile(v) for v in value]
+    return value
+
+
+def _entry_key(entry):
+    """Content identity of a linearized entry.
+
+    Ignores uuid/parentUuid/sessionId/cwd/timestamp and the per-call tool ids,
+    so the same logical turn captured on two machines compares equal.
+    """
+    msg = entry.get("message") or {}
+    payload = [entry.get("type"), msg.get("role"), _strip_volatile(msg.get("content"))]
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+
+def _has_tool_use(entry):
+    msg = entry.get("message")
+    content = msg.get("content") if isinstance(msg, dict) else None
+    return isinstance(content, list) and any(
+        isinstance(b, dict) and b.get("type") == "tool_use" for b in content)
+
+
+def _split_at_branch(a, b):
+    """Longest common content prefix of two linear transcripts.
+
+    Returns ``(branch_point_uuid_or_None, a_tail, b_tail)``. The prefix never ends
+    on a dangling ``tool_use`` (whose ``tool_result`` would land in the tail).
+    """
+    n = 0
+    for ea, eb in zip(a, b):
+        if _entry_key(ea) != _entry_key(eb):
+            break
+        n += 1
+    if n > 0 and _has_tool_use(a[n - 1]):
+        n -= 1
+    branch_point = a[n - 1]["uuid"] if n > 0 else None
+    return branch_point, a[n:], b[n:]
+
 
 class WeaveError(ValueError):
     """Any weave-layer error (unknown remote, empty history, remote transport)."""
