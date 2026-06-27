@@ -25,6 +25,11 @@ def _build_parser():
                     help="remote name (optional when only one is configured)")
     pl.add_argument("name")
 
+    rmp = sub.add_parser("rm", help="delete a session from a remote")
+    rmp.add_argument("remote", nargs="?", default=None,
+                     help="remote name (optional when only one is configured)")
+    rmp.add_argument("name")
+
     rm = sub.add_parser("remote", help="manage remotes")
     rmsub = rm.add_subparsers(dest="remote_cmd", required=True)
     rma = rmsub.add_parser("add", help="register a remote")
@@ -38,11 +43,15 @@ def _build_parser():
     mg.add_argument("source_a")
     mg.add_argument("source_b")
 
+    sub.add_parser("log", help="show local history of remote operations")
+    sub.add_parser("help", help="show this help message")
+
     return p
 
 
 def main(argv=None):
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     try:
         if args.cmd == "push":
             remote = core.push(args.remote, args.name, args.session_id)
@@ -50,6 +59,9 @@ def main(argv=None):
         elif args.cmd == "pull":
             new_id = core.pull(args.remote, args.name)
             print(f"pulled into {new_id}\n  resume: claude --resume {new_id}")
+        elif args.cmd == "rm":
+            remote = core.rm(args.remote, args.name)
+            print(f"removed {remote}/{args.name}")
         elif args.cmd == "remote":
             core.remote_add(args.name, args.url)
             print(f"remote {args.name!r} set")
@@ -60,6 +72,13 @@ def main(argv=None):
             result = core.merge(args.source_a, args.source_b)
             print(f"merged into {result.session_id}\n"
                   f"  resume: claude --resume {result.session_id}")
+        elif args.cmd == "log":
+            for e in core.log():
+                suffix = f" ({e['id']})" if e.get("id") else ""
+                print(f"{e.get('ts','')}  {e.get('op',''):<5} "
+                      f"{e.get('remote','')}/{e.get('name','')}{suffix}")
+        elif args.cmd == "help":
+            parser.print_help()
     except (ValueError, MergeError) as e:
         print(f"weave: {e}", file=sys.stderr)
         return 1

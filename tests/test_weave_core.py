@@ -103,6 +103,11 @@ class FakeServer:
     def list(self, url):
         return [n for (u, n) in self.store if u == url]
 
+    def delete(self, url, name):
+        if (url, name) not in self.store:
+            raise ValueError(f"no session {name!r} on remote")
+        del self.store[(url, name)]
+
 
 class PushTests(_WeaveBase):
     def _seed_session(self, session_id, text):
@@ -144,6 +149,69 @@ class PushTests(_WeaveBase):
         with self.assertRaises(core.WeaveError):
             core.push(None, "n", "sess-1",
                       server=FakeServer(), config_path=self.cfg)
+
+    def test_push_auto_uses_latest_local_session(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        self._seed_session("old-sess", '{"uuid":"old"}\n')
+        self._seed_session("new-sess", '{"uuid":"new"}\n')
+        os.utime(cc.session_path(self.cwd, "old-sess"), (1_000, 1_000))
+        os.utime(cc.session_path(self.cwd, "new-sess"), (2_000, 2_000))
+        fake = FakeServer()
+        core.push("origin", "auto-name", "auto",
+                  cwd=self.cwd, server=fake, config_path=self.cfg)
+        self.assertEqual(
+            fake.pushed, [("u@h:/p", "auto-name", '{"uuid":"new"}\n')])
+
+    def test_push_auto_with_no_local_sessions_raises(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        with self.assertRaises(core.WeaveError):
+            core.push("origin", "n", "auto",
+                      cwd=self.cwd, server=FakeServer(), config_path=self.cfg)
+
+
+class RmTests(_WeaveBase):
+    def test_rm_deletes_and_returns_resolved_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"): "T\n"})
+        resolved = core.rm(None, "auth", server=fake, config_path=self.cfg)
+        self.assertEqual(resolved, "origin")
+        self.assertNotIn(("u@h:/p", "auth"), fake.store)
+
+    def test_rm_absent_session_is_weave_error(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        with self.assertRaises(core.WeaveError):
+            core.rm("origin", "ghost", server=FakeServer(), config_path=self.cfg)
+
+
+class LogTests(_WeaveBase):
+    def _seed_session(self, session_id, text):
+        cc.write_text(cc.session_path(self.cwd, session_id), text)
+
+    def test_log_empty_when_no_ops(self):
+        self.assertEqual(core.log(config_path=self.cfg), [])
+
+    def test_push_ops_logged_newest_first(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        self._seed_session("s1", '{"uuid":"x"}\n')
+        fake = FakeServer()
+        core.push("origin", "first", "s1", server=fake, config_path=self.cfg)
+        core.push("origin", "second", "s1", server=fake, config_path=self.cfg)
+        entries = core.log(config_path=self.cfg)
+        self.assertEqual([e["name"] for e in entries], ["second", "first"])
+        self.assertEqual([e["op"] for e in entries], ["push", "push"])
+        self.assertTrue(all(e.get("ts") for e in entries))
+
+    def test_pull_logs_new_id_and_rm_logged(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"): _VALID_ENTRY})
+        new_id = core.pull("origin", "auth", cwd=self.cwd,
+                           server=fake, config_path=self.cfg)
+        core.rm("origin", "auth", server=fake, config_path=self.cfg)
+        entries = core.log(config_path=self.cfg)
+        self.assertEqual(entries[0]["op"], "rm")       # newest first
+        self.assertIsNone(entries[0]["id"])
+        self.assertEqual(entries[1]["op"], "pull")
+        self.assertEqual(entries[1]["id"], new_id)
 
 
 class RewriteAndPullTests(_WeaveBase):

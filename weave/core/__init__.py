@@ -8,19 +8,23 @@ from this package (``from weave import core``) for the stable surface.
 from weave.core.core import (
     MergeResult,
     WeaveError,
+    log,
     ls,
     merge,
     pull,
     push,
     remote_add,
+    rm,
 )
 
 __all__ = [
     "MergeResult",
     "WeaveError",
+    "log",
     "ls",
     "merge",
     "pull",
     "push",
     "remote_add",
+    "rm",
 ]

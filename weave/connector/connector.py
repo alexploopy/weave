@@ -66,6 +66,18 @@ def list_sessions():
         key=lambda pair: str(pair[1]))
 
 
+def latest_session(cwd):
+    """Session id of the most recently modified session for `cwd` (by mtime).
+
+    Scoped to the single project directory that encodes `cwd`. Raises
+    SessionNotFound when that project has no sessions yet."""
+    proj = projects_root() / encode_cwd(cwd)
+    files = list(proj.glob("*.jsonl")) if proj.is_dir() else []
+    if not files:
+        raise SessionNotFound(f"no local sessions for {cwd!r}")
+    return max(files, key=lambda p: p.stat().st_mtime).stem
+
+
 # --- bytes in ----------------------------------------------------------------
 def read_text(session):
     """Read a session's JSONL as text. `session` is a session id OR a path:

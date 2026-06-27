@@ -84,6 +84,30 @@ class ResolveTests(_ConnectorBase):
         self.assertEqual(cc.list_sessions(), [])
 
 
+class LatestSessionTests(_ConnectorBase):
+    def test_returns_most_recently_modified_in_project(self):
+        cwd = "/Users/me/proj"
+        enc = cc.encode_cwd(cwd)
+        old = self.make(enc, "old")
+        new = self.make(enc, "new")
+        # Make `old` clearly older than `new` by mtime.
+        os.utime(old, (1_000_000, 1_000_000))
+        os.utime(new, (2_000_000, 2_000_000))
+        self.assertEqual(cc.latest_session(cwd), "new")
+
+    def test_scoped_to_cwd_project_only(self):
+        cwd = "/Users/me/proj"
+        self.make(cc.encode_cwd(cwd), "mine")
+        # A newer session in a different project must not be chosen.
+        other = self.make(cc.encode_cwd("/Users/me/other"), "theirs")
+        os.utime(other, (9_000_000, 9_000_000))
+        self.assertEqual(cc.latest_session(cwd), "mine")
+
+    def test_raises_when_project_has_no_sessions(self):
+        with self.assertRaises(cc.SessionNotFound):
+            cc.latest_session("/Users/me/empty")
+
+
 class ReadTests(_ConnectorBase):
     def test_read_text_by_id(self):
         self.make("-Users-a-proj", "sid", text='{"a":1}\n')

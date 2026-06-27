@@ -30,6 +30,10 @@ class _Query:
         self._op = ("select", cols)
         return self
 
+    def delete(self):
+        self._op = ("delete",)
+        return self
+
     def eq(self, col, val):
         self._filters.append((col, val))
         return self
@@ -42,7 +46,17 @@ class _Query:
         kind = self._op[0]
         if kind == "upsert":
             return self._execute_upsert()
+        if kind == "delete":
+            return self._execute_delete()
         return self._execute_select()
+
+    def _execute_delete(self):
+        matched = list(self._store)
+        for col, val in self._filters:
+            matched = [r for r in matched if r.get(col) == val]
+        for row in matched:
+            self._store.remove(row)
+        return _Result([dict(r) for r in matched])
 
     def _execute_upsert(self):
         _, payload, on_conflict = self._op

@@ -21,6 +21,7 @@ import json
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from weave import config
@@ -144,6 +145,38 @@ def _remote_call(fn, *args, action, target):
         raise WeaveError(f"{action} {target}: {e}") from e
 
 
+# --- auto / log helpers ------------------------------------------------------
+def _resolve_session(session, cwd):
+    """Map the literal ``"auto"`` to the newest local session for `cwd`.
+
+    Any other value (an id or a path) passes through untouched. Connector
+    errors (e.g. no local sessions) surface as a ``WeaveError``.
+    """
+    if session != "auto":
+        return session
+    try:
+        return cc.latest_session(cwd or os.getcwd())
+    except ValueError as e:
+        raise WeaveError(str(e)) from e
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _log_op(op, remote, name, id_, *, path):
+    """Append one remote-operation record to the local log (best-effort)."""
+    config.append_log(
+        {"ts": _now_iso(), "op": op, "remote": remote, "name": name, "id": id_},
+        path=path,
+    )
+
+
+def log(*, config_path=None):
+    """Return logged remote operations, newest first."""
+    return list(reversed(config.read_log(path=config_path)))
+
+
 # --- operations --------------------------------------------------------------
 def _new_id():
     return str(uuid.uuid4())
@@ -172,21 +205,39 @@ def pull(remote, name, *, cwd=None, server=None, config_path=None):
     new_id = _new_id()
     entries = _rewrite_for_local(entries, new_id, cwd)
     cc.write_text(cc.session_path(cwd, new_id), tx.to_text(entries))
+    _log_op("pull", remote, name, new_id, path=config_path)
     return new_id
 
 
-def push(remote, name, session_id, *, server=None, config_path=None):
+def push(remote, name, session_id, *, cwd=None, server=None, config_path=None):
     """Upload the local `session_id` to `remote` (Supabase) under `name`.
 
-    `remote` may be ``None`` to use the sole configured remote. Returns the
+    `remote` may be ``None`` to use the sole configured remote, and `session_id`
+    may be ``"auto"`` to use the newest local session for `cwd`. Returns the
     resolved remote name so callers can report where the push landed. Bytes are
     sent as-is; all machine-specific rewriting happens on `pull`.
     """
+    session_id = _resolve_session(session_id, cwd)
     text = cc.read_text(session_id)            # SessionNotFound/Ambiguous propagate
     remote = _resolve_remote(remote, path=config_path)
     url = _remote_url(remote, path=config_path)
     svr = server or _load_server()
     _remote_call(svr.push, url, name, text, action="push", target=f"{remote}/{name}")
+    _log_op("push", remote, name, session_id, path=config_path)
+    return remote
+
+
+def rm(remote, name, *, server=None, config_path=None):
+    """Delete the session stored as `name` on `remote` (Supabase).
+
+    `remote` may be ``None`` to use the sole configured remote. Local sessions
+    are never touched. Returns the resolved remote name.
+    """
+    remote = _resolve_remote(remote, path=config_path)
+    url = _remote_url(remote, path=config_path)
+    svr = server or _load_server()
+    _remote_call(svr.delete, url, name, action="rm", target=f"{remote}/{name}")
+    _log_op("rm", remote, name, None, path=config_path)
     return remote
 
 
@@ -231,7 +282,11 @@ def merge(source_a, source_b, *, cwd=None, merger=None):
     branch and splices in a synthetic Read tool cycle whose result holds the
     briefing. Identity is rewritten for the local machine and the clone is
     written under ~/.claude. Both sources are left untouched.
+
+    Either source may be ``"auto"`` to use the newest local session for `cwd`.
     """
+    source_a = _resolve_session(source_a, cwd)
+    source_b = _resolve_session(source_b, cwd)
     a = tx.from_text(_read_source(source_a))
     b = tx.from_text(_read_source(source_b))
     if not a and not b:

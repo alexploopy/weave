@@ -63,6 +63,26 @@ class PushPullTests(_ServerBase):
             server.pull("weave://team-b", "auth")
 
 
+class DeleteTests(_ServerBase):
+    def test_delete_removes_only_the_named_session(self):
+        server.push("weave://team", "auth", "A\n")
+        server.push("weave://team", "ui", "B\n")
+        server.delete("weave://team", "auth")
+        self.assertEqual(server.list("weave://team"), ["ui"])
+        with self.assertRaises(server.ServerError):
+            server.pull("weave://team", "auth")
+
+    def test_delete_scoped_by_remote_url(self):
+        server.push("weave://team-a", "auth", "A\n")
+        with self.assertRaises(server.ServerError):
+            server.delete("weave://team-b", "auth")
+        self.assertEqual(server.list("weave://team-a"), ["auth"])  # untouched
+
+    def test_delete_absent_raises(self):
+        with self.assertRaises(server.ServerError):
+            server.delete("weave://team", "ghost")
+
+
 class ListTests(_ServerBase):
     def test_list_returns_names_for_remote(self):
         server.push("weave://team", "auth", "1\n")

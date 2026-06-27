@@ -1,4 +1,5 @@
 import configparser
+import json
 from pathlib import Path
 
 DEFAULT_PATH = ".weave/config"
@@ -6,6 +7,36 @@ DEFAULT_PATH = ".weave/config"
 
 def _resolve(path):
     return Path(path or DEFAULT_PATH)
+
+
+def _log_path(path):
+    """Operation log lives next to the config file (``.weave/log``)."""
+    return _resolve(path).parent / "log"
+
+
+def append_log(entry, *, path=None):
+    """Append one operation record (a dict) as a JSON line to the log."""
+    p = _log_path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def read_log(*, path=None):
+    """Return the logged operation records in file (chronological) order."""
+    p = _log_path(path)
+    if not p.is_file():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
 
 
 def _read(path):

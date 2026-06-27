@@ -110,6 +110,29 @@ def pull(url, name):
     return rows[0]["transcript"]
 
 
+def delete(url, name):
+    """Delete the session stored under ``(url, name)``.
+
+    Raises :class:`ServerError` if no such session exists on the remote, so the
+    caller can report a miss rather than silently succeeding.
+    """
+    client = _client()
+    try:
+        res = (
+            client.table(_TABLE)
+            .delete()
+            .eq("remote_url", url)
+            .eq("name", name)
+            .execute()
+        )
+    except ServerError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise ServerError(f"delete of {name!r} failed: {e}") from e
+    if not (res.data or []):
+        raise ServerError(f"no session {name!r} on remote")
+
+
 def list(url):  # noqa: A001 - name fixed by the transport contract
     """Return the session names stored for the remote ``url``."""
     client = _client()

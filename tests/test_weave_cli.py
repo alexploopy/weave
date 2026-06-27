@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from weave import cli, config, core
+from weave import cli, config, connector as cc, core
 from weave.config import config as _config_mod
 from weave.core import core as _core_mod
 
@@ -28,6 +28,11 @@ class FakeServer:
 
     def list(self, url):
         return [n for (u, n) in self.store if u == url]
+
+    def delete(self, url, name):
+        if (url, name) not in self.store:
+            raise ValueError(f"no session {name!r} on remote")
+        del self.store[(url, name)]
 
 
 class CliBase(unittest.TestCase):
@@ -80,6 +85,54 @@ class CliTests(CliBase):
             rc = cli.main(["pull", "nope", "x"])
         self.assertEqual(rc, 1)
         self.assertIn("weave:", err.getvalue())
+
+    def test_rm_subcommand_deletes_from_remote(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        fake = FakeServer({("u@h:/p", "auth"): "T\n"})
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = cli.main(["rm", "auth"])
+        self.assertEqual(rc, 0)
+        self.assertIn("removed origin/auth", out.getvalue())
+        self.assertNotIn(("u@h:/p", "auth"), fake.store)
+
+    def test_help_subcommand_prints_usage(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = cli.main(["help"])
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("push", text)
+        self.assertIn("merge", text)
+        self.assertIn("log", text)
+
+    def test_push_session_auto_uses_latest_local(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        cc.write_text(cc.session_path(self.cwd, "old"), '{"uuid":"o"}\n')
+        cc.write_text(cc.session_path(self.cwd, "new"), '{"uuid":"n"}\n')
+        os.utime(cc.session_path(self.cwd, "old"), (1_000, 1_000))
+        os.utime(cc.session_path(self.cwd, "new"), (2_000, 2_000))
+        fake = FakeServer()
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = cli.main(["push", "aname", "--session", "auto"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(fake.store[("u@h:/p", "aname")], '{"uuid":"n"}\n')
+
+    def test_log_subcommand_lists_recorded_ops(self):
+        core.remote_add("origin", "u@h:/p", path=self.cfg)
+        cc.write_text(cc.session_path(self.cwd, "s1"), '{"uuid":"x"}\n')
+        fake = FakeServer()
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
+            with contextlib.redirect_stdout(io.StringIO()):
+                cli.main(["push", "mine", "--session", "s1"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = cli.main(["log"])
+        self.assertEqual(rc, 0)
+        self.assertIn("push", out.getvalue())
+        self.assertIn("origin/mine", out.getvalue())
 
     def test_remote_add_subcommand(self):
         with contextlib.redirect_stdout(io.StringIO()):
