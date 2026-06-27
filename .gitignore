@@ -1,3 +1,5 @@
+.weave/     
+
 # --- Python ---
 # Byte-compiled / optimized / cached files
 __pycache__/
