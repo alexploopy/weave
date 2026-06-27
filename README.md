@@ -10,24 +10,44 @@ The name is `weave merge` but the primitive is broader: Claude Code sessions sho
 
 ## Install
 
-**Development** (from a clone):
+Requires Python 3.11+ and [pipx](https://pipx.pypa.io/).
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS/Linux
-pip install -e ".[dev]"
-copy .env.example .env            # fill in CEREBRAS_* and SUPABASE_*
-```
+brew install pipx    # one-time
+pipx ensurepath      # one-time
 
-**Remote push/pull** requires the Supabase extra (`supabase>=2.0`, included in `[dev]`). Run the migration in [`supabase/migrations/0001_init_weave_sessions.sql`](supabase/migrations/0001_init_weave_sessions.sql) on your Supabase project, then set `SUPABASE_URL` and `SUPABASE_KEY` (service-role) in `.env`.
+git clone https://github.com/alexploopy/weave.git
+cd weave
+pipx install ".[dev]"
+```
 
 Verify:
 
 ```bash
 weave --help
-python -m unittest discover -s tests -p "test_*.py" -v
 ```
+
+### Set up Supabase
+
+Weave stores sessions in Supabase. Create a project, then run the migration in
+[`supabase/migrations/0001_init_weave_sessions.sql`](supabase/migrations/0001_init_weave_sessions.sql)
+in the Supabase SQL editor.
+
+Copy `.env.example` to `.env` and fill in your keys:
+
+```bash
+cp .env.example .env
+```
+
+Set `SUPABASE_URL` and `SUPABASE_KEY` (service-role key). Set `CEREBRAS_API_KEY` if you want `weave merge`.
+
+### Add a remote
+
+```bash
+weave remote add origin weave://my-team
+```
+
+This writes `.weave/config`. Commit it so your team gets the remote automatically.
 
 ---
 

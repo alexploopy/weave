@@ -106,7 +106,7 @@ class BuildMergePromptTests(unittest.TestCase):
             "type": "assistant", "uuid": "u", "sessionId": "s",
             "timestamp": "t", "cwd": "/p",
             "message": {"role": "assistant", "content": [
-                {"type": "tool_result", "content": "Y" * 4000}]},
+                {"type": "tool_result", "content": "Y" * 16000}]},
         }]
         prompt = build_merge_prompt(None, entries, [])
         raw = json.dumps(entries, indent=2)
