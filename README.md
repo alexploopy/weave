@@ -1,132 +1,117 @@
-# weave
+Weave
 
-**Semantic git merging powered by your Claude chat history.**
+Git primitives for Claude Code sessions.
+Weave makes Claude Code sessions first-class citizens of your team's workflow. Pull a colleague's session and resume it on your machine with exactly the context they had, same thinking blocks, same tool results, same reasoning chain, as if the session had been running on your computer all along. Fork a session to explore a different approach without losing the original. Merge two sessions into one when parallel work needs to come together. Push sessions to a shared remote your whole team can pull from.
+The name is weave merge but the primitive is broader: Claude Code sessions should travel across machines and engineers as naturally as git commits do.
 
-`weave` merges two git branches by reasoning about *why* the code on each side
-looks the way it does — using each branch's preserved Claude Code conversation —
-to resolve conflicts that a plain `git merge` can't. It then carries the combined
-reasoning forward, so the next Claude session inherits the full context of both
-branches.
+The problem
+Claude Code sessions are trapped on the machine that created them. When two developers work on separate problems, their conversational context lives in two separate JSONL files on separate machines. You cannot hand that context to a colleague without sending a raw transcript they have to read, understand, and re-explain to their own Claude session. You cannot pick up where a teammate left off. You cannot split a session into two parallel explorations. You cannot carry another engineer's full reasoning (thinking blocks, failed attempts, tool results) onto your own machine and just keep going.
 
----
+The solution
+Claude Code stores conversations as JSONL at ~/.claude/projects//.jsonl, including thinking blocks and tool results. Weave treats this history as a first-class primitive, the same way git treats commits, and gives you the operations that should have always existed:
+Handoff: pull a colleague's session onto your machine and resume it exactly as they left it. Claude already has their full context: what was tried, what failed, what was decided, and why.
+Fork: split your current session into two independent copies. Explore a different approach in one without touching the other. If it works, push it. If it doesn't, your original is untouched.
+Merge: combine two sessions into one. Cerebras runs locally, reads both conversation histories, and produces a unified session that preserves reasoning from both sides, deduplicates redundant tool calls, and flags where the two lines of work conflict.
 
-## The problem
+weave merge  
 
-Two developers each work on a separate branch, each with their own Claude Code
-session. When the branches merge, the *code* comes together but the
-*conversational context* — the intent, the trade-offs, the "why" behind every
-decision — is lost. Plain `git merge` only sees text. It has no idea that branch
-A renamed a function for a reason branch B's author never knew about.
+┌─ Parse ────┐  ┌─ Distill ──┐  ┌─ Merge ────┐  ┌─ Write ───┐
+│ JSONL →    │  │ ChatContext│  │ Cerebras   │  │ merged    │
+│ typed      │→ │ signal not │→ │ unifies    │→ │ JSONL to  │
+│ records    │  │ raw noise  │  │ both sides │  │ ~/.claude │
+└────────────┘  └────────────┘  └───────────┘  └───────────┘
+↓
+reprompt loop if rejected
+Stages
+Parse: Reads JSONL files into typed records (user, assistant text, thinking blocks, tool_use, tool_result) and ignores the rest.
+Distill: Normalizes sessions into a ChatContext capturing intent, assistant decisions, thinking blocks, tool interactions, failures, and unresolved points.
+Merge: Prompts Cerebras with both distilled contexts to return a unified conversation thread that preserves reasoning, deduplicates tool calls, and flags conflicts.
+Write: Places the merged JSONL in ~/.claude/projects// with corrected cwd fields. Every record's cwd field is rewritten from the source engineer's encoded path (e.g. -Users-alice-myapp) to the local machine's encoded path (e.g. -Users-bob-myapp). Without this rewrite, claude --resume silently starts a fresh session instead of picking up the merged context.
+Reprompt loop: Re-runs failed or rejected merges using feedback, passing the prior attempt and feedback back to Cerebras.
+WeaveHub
+Weave uses a remote directory over SSH to share sessions between engineers, mirroring how git uses remotes. No custom server software is required, just a directory on any Linux machine or VPS your team controls.
 
-## The solution
+# Set up a WeaveHub once on any machine with SSH
 
-Claude Code already stores every conversation as JSONL at
-`~/.claude/projects/<encoded-path>/<uuid>.jsonl`, including rich message types
-like `file-history-snapshot` that tie code state to the dialogue that produced
-it. `weave` treats that history as a first-class merge input:
+mkdir -p /srv/weave/myteam
+Configure the remote in your project via .weave/config and commit it to the repo. Every team member who clones the repo gets the WeaveHub config automatically.
 
-1. Distill each branch's chat history into the intent and key decisions behind it.
-2. Feed the conflicting code **plus both sides' reasoning** to Cerebras.
-3. Produce a semantically-merged result with a rationale for each resolution.
-4. Synthesize a combined chat history so the next session inherits the full "why."
+[remote "origin"]
+url = user@mycompany.com:/srv/weave/myteam
+New team members point their local machine at the WeaveHub with:
 
-Speed is the point: Cerebras reasoning inference resolves merges fast enough to
-keep a human in flow.
+weave remote add origin user@mycompany.com:/srv/weave/myteam
+Session names are scoped to the remote, so auth-refactor on one team's WeaveHub never collides with another team's.
 
----
+Commands
+weave remote add   (Registers a WeaveHub remote, mirroring git remote add).
+weave push origin  (Uploads your current session to the WeaveHub).
+weave pull origin  (Downloads a named session from the WeaveHub and places it locally, rewriting cwd fields for your machine. Resume immediately with claude --resume).
+weave fork  (Splits your current session into two independent local copies. The original is preserved; the fork is yours to diverge).
+weave merge  (Merges a pulled session into your current local session via Cerebras).
+weave resume (Shortcut for weave pull + claude --resume in one step).
+weave ls origin (Lists available sessions on the WeaveHub).
+weave show  (Previews the distilled context for a session).
+Note: weave merge automatically snapshots your current session to the WeaveHub before making local changes. If the merge fails, your original session is untouched and recoverable.
+Typical flows
+Handoff, pick up where a teammate left off:
 
-## The pipeline
+# Engineer A pushes their session
 
-```
-weave merge <A> --onto <B> [--new-branch C]
+weave push origin auth-refactor
 
-  ┌─ Resolve ──┐  ┌─ Extract ──┐  ┌─ Diff ───┐  ┌─ Merge ────┐  ┌─ Apply ──┐  ┌─ Fork ────┐
-  │ branch →   │  │ JSONL →    │  │ 3-way    │  │ Cerebras   │  │ write    │  │ synthesize│
-  │ session    │→ │ ChatContext│→ │ base/A/B │→ │ resolves   │→ │ onto B   │→ │ merged    │
-  │ mapping    │  │ (distilled)│  │ conflicts│  │ w/ context │  │ or new C │  │ JSONL     │
-  └────────────┘  └────────────┘  └──────────┘  └────────────┘  └──────────┘  └───────────┘
-                                                                                     ↓
-                                                                          reprompt loop if rejected
-```
+# Engineer B pulls it and resumes as if it ran on their machine
 
-### Stages
+weave pull origin auth-refactor
+claude --resume
+Fork, explore a different approach without losing the original:
 
-1. **Resolve** — map each branch to its Claude session(s) via a sidecar
-   (`.weave/sessions.toml`). `weave track` stamps the current branch ↔ session link.
-2. **Extract** — parse both JSONL files into a normalized, **distilled**
-   `ChatContext` (user intent, key assistant decisions, `file-history-snapshot`
-   deltas) — signal, not 300 raw messages.
-3. **Diff** — standard three-way diff (merge-base, A, B). Clean hunks pass through
-   untouched; only conflicting regions go to the model.
-4. **Merge (Cerebras)** — for each conflict, prompt with both sides' code + each
-   side's distilled "why." Returns merged code **plus a one-line rationale** per
-   resolution.
-5. **Apply** — write the result either in-place onto B or into a new branch C.
-   **Always shows a reviewable diff; never auto-commits silently.**
-6. **Fork** — emit a new merged JSONL chat object fusing both histories + the
-   merge rationales, so the next Claude session inherits combined context.
-7. **Reprompt loop** — reject a resolution → re-run with feedback; the prior
-   attempt + feedback go back to Cerebras.
+# Fork your current session into two independent copies
 
----
+weave fork my-current-work
 
-## CLI
+# One copy stays as-is, the other is yours to take in a new direction
 
-| Command | Purpose |
-|---------|---------|
-| `weave merge <A> --onto <B> [--new-branch <C>] [--dry-run]` | The hero command. |
-| `weave track` | Record the current branch ↔ session link. |
-| `weave show <branch>` | Preview the distilled context for a branch. |
-| `weave edit <session>` | CRUD on JSONL chat objects *(stretch / post-hackathon)*. |
+# Push whichever works out
 
-`merge A --onto B` writes either in-place onto B, or — with `--new-branch C` —
-into a fresh branch. The combined chat history travels either way.
+weave push origin my-current-work
+Merge, combine two sessions into one:
 
----
+# Engineer A finishes and shares their session
 
-## Architecture
+weave push origin auth-refactor
 
-Each module has one clear purpose and is independently testable.
+# Engineer B pulls and merges A's context into their own session
 
-| Module | Responsibility | Depends on |
-|--------|---------------|------------|
-| `cli` | arg parsing, orchestration, diff display | all |
-| `jsonl` | parse/normalize Claude JSONL → `ChatContext` | — |
-| `gitops` | branch refs, 3-way diff, apply, new-branch | `git` |
-| `context` | distill `ChatContext`; synthesize merged history | `jsonl` |
-| `merge` | Cerebras client, prompt building, response parsing | `context`, `gitops` |
+weave pull origin auth-refactor
+weave merge auth-refactor
+claude --resume
+Multiple sessions in the same directory
+If you have more than one active Claude Code session running from the same project directory, specify the target session explicitly:
 
-### Error handling — *never corrupt, always reviewable*
+weave merge auth-refactor --into 
+Run weave ls (no remote) to list local sessions and their IDs.
 
-- Model returns unparseable output → fall back to standard conflict markers for
-  that hunk; don't fail the whole merge.
-- A branch has no chat history → degrade to a code-only merge, warn the user.
-- Cerebras unreachable / no API key → clear error, exit **before** touching the repo.
+Architecture
+Each module has one clear purpose and is independently testable:
 
----
+cli: Argument parsing and orchestration. Depends on all modules.
+jsonl: Parses and normalizes Claude JSONL data into a ChatContext. No dependencies.
+remote: SSH push/pull operations and snapshot management. No dependencies.
+context: Distills the ChatContext and synthesizes merged history. Depends on jsonl.
+merge: Cerebras client, prompt building, and response parsing. Depends on context.
+Error handling
+Unparseable model output: Surfaces the raw output for inspection instead of writing a broken JSONL file. If the user rejects a merge result, re-runs with that feedback passed back to Cerebras.
+No chat history: Warns the user and exits before modifying files.
+Cerebras unreachable / no API key: Throws a clear error and exits before touching the local session.
+Merge failure: Local session remains untouched; original state is recoverable via the WeaveHub snapshot.
+Testing & demo strategy
+The plumbing is genuinely end-to-end (real JSONL, real Cerebras), but the demo runs on seeded fixtures for deterministic results.
 
-## Testing & demo strategy
-
-**Hybrid: real pipeline, controlled input.** The plumbing is genuinely
-end-to-end — real JSONL, real branches, real Cerebras — but the demo runs on a
-seeded fixture so the live result is deterministic.
-
-- **Fixture repo** committed in-tree: two branches touching the same code in a
-  way `git merge` botches, each with a seeded JSONL history. This *is* the demo.
-- **Unit:** golden tests on `jsonl` distillation and `gitops` diff; `merge`
-  tested against a **mocked** Cerebras response.
-- **Integration:** one real-Cerebras test gated behind the API key env var.
-
----
-
-## Configuration
-
-| Variable | Purpose |
-|----------|---------|
-| `CEREBRAS_API_KEY` | Auth for Cerebras inference (OpenAI-compatible API). |
-
----
-
-## Status
-
-Proof of concept — hackathon build. Implemented in Rust.
+Fixtures: Two seeded JSONL histories committed in-tree representing different solutions to the same problem.
+Unit tests: Golden tests on JSONL parsing and context distillation; merge tested against a mocked Cerebras response.
+Integration tests: One real-Cerebras test gated behind the CEREBRAS_API_KEY environment variable.
+Configuration
+CEREBRAS_API_KEY: Authentication for Cerebras inference (OpenAI-compatible API).
+Status
+Proof of concept hackathon build. Implemented in Python.
