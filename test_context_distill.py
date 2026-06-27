@@ -31,6 +31,43 @@ class DistillFromJsonlTests(unittest.TestCase):
         self.assertEqual(ctx.entry_count, 2)
         self.assertEqual(result.warnings, [])
 
+    def test_rich_jsonl_extracts_thinking_tools_and_outcomes(self):
+        text = (_FIXTURES / "session_rich.jsonl").read_text(encoding="utf-8")
+        source_path = str(_FIXTURES / "session_rich.jsonl")
+
+        result = distill_from_jsonl(text, source_label="a", source_path=source_path)
+        ctx = result.context
+
+        self.assertEqual(ctx.session_id, "sess-rich-001")
+        self.assertEqual(ctx.leaf_uuid, "uuid-rich-leaf")
+        self.assertEqual(ctx.model, "claude-sonnet")
+        self.assertEqual(ctx.claude_version, "1.0.0")
+        self.assertTrue(ctx.goal)
+        self.assertIn("JWT auth", ctx.goal)
+
+        self.assertEqual(len(ctx.thinking_highlights), 1)
+        self.assertIn("read auth module", ctx.thinking_highlights[0].casefold())
+
+        self.assertEqual(len(ctx.file_refs), 1)
+        self.assertEqual(ctx.file_refs[0].path, "src/auth.py")
+        self.assertEqual(ctx.file_refs[0].action, "read")
+
+        self.assertEqual(len(ctx.commands), 1)
+        self.assertIn("pytest", ctx.commands[0].command)
+        self.assertEqual(ctx.commands[0].outcome, "failure")
+
+        self.assertEqual(len(ctx.tests), 1)
+        self.assertEqual(ctx.tests[0].outcome, "fail")
+
+        self.assertEqual(len(ctx.failed_attempts), 1)
+        self.assertIn("AssertionError", ctx.failed_attempts[0].reason or "")
+
+        self.assertIn("Transcript excerpt", ctx.summary)
+        self.assertIn("[thinking]", ctx.summary)
+        self.assertIn("[tool Read]", ctx.summary)
+        self.assertIn("[tool_result]", ctx.summary)
+        self.assertIn("[tool Bash]", ctx.summary)
+
     def test_malformed_line_is_skipped_with_warning(self):
         text = (
             '{"parentUuid":null,"type":"user","uuid":"u1","sessionId":"s1",'
