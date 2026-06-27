@@ -1,7 +1,7 @@
 """Semantic merge output consumed by the synthesizer/writer.
 
 The Cerebras merge layer owns ``ChatContext`` + ``ChatContext`` → :class:`MergedContext`.
-This is not raw Claude JSONL; the synthesizer turns it into ``transcript_api`` specs.
+This is not raw Claude JSONL; the synthesizer turns it into ``weave.transcript`` specs.
 """
 
 from __future__ import annotations

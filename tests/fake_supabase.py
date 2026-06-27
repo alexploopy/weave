@@ -1,6 +1,6 @@
 """In-memory fake of the supabase-py client, for tests.
 
-Implements just the chainable query-builder surface that server.py uses:
+Implements just the chainable query-builder surface that weave.remote uses:
 
     client.table(name).upsert(payload, on_conflict="a,b").execute()
     client.table(name).select("cols").eq(col, val)...[.limit(n)].execute()

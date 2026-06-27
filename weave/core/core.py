@@ -1,19 +1,19 @@
 """Weave orchestrator core: push/pull/merge Claude Code sessions, plus remote/ls.
 
 Owns ALL policy (id choice, cwd/sessionId rewrite, config resolution,
-validation). Delegates mechanics to claude_connector_api (byte I/O),
-transcript_api (entry editing), weave.config (remote resolution), the `server`
-collaborator (byte transport backed by Supabase), and the merge layer
-(distill + Cerebras). Stdlib only here; the Supabase dependency lives entirely
-behind `server`.
+validation). Delegates mechanics to weave.connector (byte I/O),
+weave.transcript (entry editing), weave.config (remote resolution), the
+`weave.remote` collaborator (byte transport backed by Supabase), and the merge
+layer (distill + Cerebras). Stdlib only here; the Supabase dependency lives
+entirely behind `weave.remote`.
 
 Data pipeline for the remote operations:
 
-    Supabase (weave_sessions) <--API--> server.py --text--> weave.core
+    Supabase (weave_sessions) <--API--> weave.remote --text--> weave.core
 
-`server` moves raw transcript text keyed by (remote_url, name); this module
-applies every machine-specific policy (fresh id, cwd/sessionId rewrite) before
-writing anything locally.
+`weave.remote` moves raw transcript text keyed by (remote_url, name); this
+module applies every machine-specific policy (fresh id, cwd/sessionId rewrite)
+before writing anything locally.
 """
 
 import importlib
@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-import claude_connector_api as cc
-import transcript_api as tx
 from weave import config
+from weave import connector as cc
+from weave import transcript as tx
 from weave.context.distill import distill_from_jsonl
 from weave.merge.factory import default_merger
 from weave.merge.protocols import ContextMerger
@@ -71,11 +71,11 @@ def _remote_url(remote, *, path=None):
 
 
 def _load_server():
-    return importlib.import_module("server")
+    return importlib.import_module("weave.remote")
 
 
 def _remote_call(fn, *args, action, target):
-    """Invoke a `server` transport call, mapping any failure to WeaveError.
+    """Invoke a `weave.remote` transport call, mapping any failure to WeaveError.
 
     Keeps the original (actionable) message from the transport layer -- e.g.
     missing credentials or an absent remote session -- while tagging it with
@@ -101,8 +101,8 @@ def _rewrite_for_local(entries, new_id, cwd):
 def pull(remote, name, *, cwd=None, server=None, config_path=None):
     """Download `name` from `remote` (Supabase) into a fresh local session.
 
-    Pipeline: server.pull -> transcript_api parse -> local id/cwd rewrite ->
-    connector write. Validates (unknown remote, transport failure, empty
+    Pipeline: weave.remote.pull -> weave.transcript parse -> local id/cwd
+    rewrite -> connector write. Validates (unknown remote, transport failure, empty
     history) and fails before any local write.
     """
     url = _remote_url(remote, path=config_path)

@@ -1,8 +1,8 @@
 """Public CRUD interface for editing Claude Code transcripts.
 
 This is the stable surface other code should import. The editing engine lives in
-the private ``transcript`` module and is free to change underneath; everything
-here is a thin delegate to it.
+the private ``weave.transcript.engine`` module and is free to change underneath;
+everything here is a thin delegate to it.
 
 A transcript is JSONL: one JSON entry per line, entries linked into a tree by
 ``parentUuid`` -> ``uuid``. Real transcripts FORK (a rewind/edit appends a new
@@ -12,7 +12,7 @@ serializes is a single linear chain: no branches, no forks, ever.
 
 Pipeline::
 
-    import transcript_api as tx
+    from weave import transcript as tx
 
     entries = tx.from_text(open(path).read())          # linearize to the active branch
     entries, created = tx.create_at_end(
@@ -45,7 +45,7 @@ are auto-filled. A ``tool_call`` always builds the atomic assistant(tool_use) +
 user(tool_result) pair (+ optional ``reply``), handled as one unit by every op.
 """
 
-from transcript import (
+from weave.transcript.engine import (
     _linearize,
     _serialize,
     _from_text,

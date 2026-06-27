@@ -2,11 +2,11 @@
 
 Two layers of coverage:
   * policy branches via an injected in-memory `server` fake (fast, no transport);
-  * an end-to-end path that drives core.push/pull/ls through the REAL server.py,
-    with a fake `supabase` module swapped into sys.modules so the Supabase
-    pipeline (core -> server -> client) runs without a network.
+  * an end-to-end path that drives core.push/pull/ls through the REAL
+    weave.remote, with a fake `supabase` module swapped into sys.modules so the
+    Supabase pipeline (core -> weave.remote -> client) runs without a network.
 
-Run (from repo root):  python3 -m unittest test_weave_core
+Run (from repo root):  python3 -m pytest tests/test_weave_core.py
 """
 
 import json
@@ -18,8 +18,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import claude_connector_api as cc
-from weave import config, core
+from weave import config, connector as cc, core
+from weave.core import core as _core_mod
+from weave.remote import remote as _remote_server
 
 from fake_supabase import FakeSupabaseClient
 
@@ -60,7 +61,7 @@ class ConfigTests(_WeaveBase):
         with self.assertRaises(ValueError):
             config.get_remote("missing", path=self.cfg)
         with self.assertRaises(core.WeaveError):
-            core._remote_url("missing", path=self.cfg)
+            _core_mod._remote_url("missing", path=self.cfg)
 
 
 class FakeServer:
@@ -112,7 +113,7 @@ class RewriteAndPullTests(_WeaveBase):
     def test_rewrite_for_local_sets_cwd_and_sessionid(self):
         entries = [{"uuid": "a", "cwd": "/old", "sessionId": "old"},
                    {"uuid": "b", "cwd": "/old", "sessionId": "old"}]
-        out = core._rewrite_for_local(entries, "new-id", "/Users/me/proj")
+        out = _core_mod._rewrite_for_local(entries, "new-id", "/Users/me/proj")
         for e in out:
             self.assertEqual(e["cwd"], "/Users/me/proj")
             self.assertEqual(e["sessionId"], "new-id")
@@ -172,8 +173,7 @@ class SupabaseEndToEndTests(_WeaveBase):
 
     def setUp(self):
         super().setUp()
-        import server
-        self.server = server
+        self.server = _remote_server
         self.client = FakeSupabaseClient()
         fake_mod = types.ModuleType("supabase")
         fake_mod.create_client = lambda url, key: self.client
@@ -237,8 +237,7 @@ class MissingCredentialsTests(_WeaveBase):
 
     def setUp(self):
         super().setUp()
-        import server
-        self.server = server
+        self.server = _remote_server
         self.server._reset_client_cache()
         self.addCleanup(self.server._reset_client_cache)
         env = mock.patch.dict(os.environ, {}, clear=False)

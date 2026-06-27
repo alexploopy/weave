@@ -1,6 +1,6 @@
-"""Combinatorial INTEGRATION tests: claude_connector_api x transcript_api.
+"""Combinatorial INTEGRATION tests: weave.connector x weave.transcript.
 
-The per-module unit suites (test_claude_connector_api, test_transcript*) cover
+The per-module unit suites (test_connector, test_transcript*) cover
 each feature in isolation. This suite exercises the full cross product of how
 they compose end to end:
 
@@ -34,8 +34,8 @@ import uuid as uuidlib
 from pathlib import Path
 from unittest import mock
 
-import claude_connector_api as cc
-import transcript_api as tx
+from weave import connector as cc
+from weave import transcript as tx
 
 CWD = "/work/proj"   # fake project cwd -> encoded dir under the temp root
 

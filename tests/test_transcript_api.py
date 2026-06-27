@@ -1,13 +1,13 @@
 """Tests for the public façade.
 
-Run:  python3 -m unittest test_transcript_api -v
+Run:  python3 -m pytest tests/test_transcript_api.py -v
 """
 
 import json
 import unittest
 from collections import Counter
 
-import transcript_api as tx
+from weave import transcript as tx
 
 FORKED = (
     '{"parentUuid":null,"type":"user","uuid":"u1","timestamp":"2026-06-26T10:00:00.000Z","message":{"role":"user","content":"hello"}}\n'

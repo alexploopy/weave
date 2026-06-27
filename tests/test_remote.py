@@ -1,10 +1,10 @@
-"""Tests for server.py (the Supabase-backed remote transport).
+"""Tests for weave.remote (the Supabase-backed remote transport).
 
 A fake `supabase` module is injected into sys.modules so the real
 `from supabase import create_client` path runs against an in-memory client --
-no network, no real project. server.py is otherwise exercised verbatim.
+no network, no real project. weave.remote is otherwise exercised verbatim.
 
-Run (from repo root):  python3 -m unittest test_server
+Run (from repo root):  python3 -m pytest tests/test_remote.py
 """
 
 import os
@@ -13,7 +13,7 @@ import types
 import unittest
 from unittest import mock
 
-import server
+from weave.remote import remote as server
 from fake_supabase import FakeSupabaseClient
 
 

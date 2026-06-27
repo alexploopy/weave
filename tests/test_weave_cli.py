@@ -1,6 +1,6 @@
 """Tests for weave.cli — no real ~/.claude is ever touched.
 
-Run (from repo root):  python3 -m unittest tests.test_weave_cli -v
+Run (from repo root):  python3 -m pytest tests/test_weave_cli.py -v
 """
 
 import contextlib
@@ -13,6 +13,7 @@ from unittest import mock
 
 from weave import cli, config, core
 from weave.config import config as _config_mod
+from weave.core import core as _core_mod
 
 
 class FakeServer:
@@ -42,7 +43,7 @@ class CliBase(unittest.TestCase):
         self.cwd = "/Users/tester/proj"
         # Redirect core defaults at their definition site.
         for p in (mock.patch.object(_config_mod, "DEFAULT_PATH", str(self.cfg)),
-                  mock.patch.object(core.os, "getcwd", return_value=self.cwd)):
+                  mock.patch.object(_core_mod.os, "getcwd", return_value=self.cwd)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -54,7 +55,7 @@ class CliTests(CliBase):
             '{"parentUuid":null,"type":"user","uuid":"u1","cwd":"/a",'
             '"sessionId":"s","timestamp":"2026-06-26T10:00:00.000Z",'
             '"message":{"role":"user","content":"hi"}}\n'})
-        with mock.patch.object(core, "_load_server", return_value=fake):
+        with mock.patch.object(_core_mod, "_load_server", return_value=fake):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 rc = cli.main(["pull", "origin", "auth"])

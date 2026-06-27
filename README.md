@@ -139,15 +139,29 @@ Run `weave ls` (no remote) to list local sessions and their IDs.
 
 ## Architecture
 
-Each module has one clear purpose and is independently testable.
+All runtime code lives under the `weave/` package. Each module is a directory
+with an `__init__.py` defining its public surface over private implementation
+files, and each is independently testable.
 
 | Module | Responsibility | Depends on |
 |--------|---------------|------------|
-| `cli` | Argument parsing and orchestration. | all |
-| `jsonl` | Parses and normalizes Claude JSONL data into a `ChatContext`. | — |
-| `remote` | SSH push/pull operations and snapshot management. | — |
-| `context` | Distills the `ChatContext` and synthesizes merged history. | `jsonl` |
-| `merge` | Cerebras client, prompt building, and response parsing. | `context` |
+| `weave.cli` | Argument parsing and CLI marshalling. | `weave.core` |
+| `weave.core` | Orchestrates push/pull/fork/merge; owns all machine-specific policy (id choice, cwd/sessionId rewrite). | all |
+| `weave.connector` | Local-filesystem byte I/O: session id ↔ `~/.claude` JSONL path. | — |
+| `weave.transcript` | Linear CRUD over a transcript's active branch (`api`) over a private linearize/serialize engine (`engine`). | — |
+| `weave.remote` | Supabase-backed byte transport (`push` / `pull` / `list`), keyed by `(url, name)`. | — |
+| `weave.config` | Resolves `.weave/config` remotes. | — |
+| `weave.context` | Parses Claude JSONL into a `ChatContext` and distills it. | — |
+| `weave.merge` | Cerebras client, prompt building, response parsing, and validation. | `weave.context` |
+
+### Project layout
+
+```
+weave/         # all runtime code (one package per module)
+tests/         # every test, shared helpers, and JSONL/JSON fixtures
+docs/          # design specs and plans
+supabase/      # remote-transport schema migrations
+```
 
 ---
 

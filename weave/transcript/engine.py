@@ -15,7 +15,7 @@ Because ``_serialize`` sets every entry's ``parentUuid`` to the previous entry's
 ``uuid``, each node has exactly one child -- a fork is unrepresentable in the
 output. The only fork-aware code in the system is ``_linearize``.
 
-Everything here is module-private; the public surface is ``transcript_api``.
+Everything here is module-private; the public surface is ``weave.transcript``.
 """
 
 import json

@@ -1,6 +1,6 @@
-"""Tests for claude_connector_api — no real ~/.claude is ever touched.
+"""Tests for weave.connector — no real ~/.claude is ever touched.
 
-Run:  python3 -m unittest test_claude_connector_api -v
+Run:  python3 -m pytest tests/test_connector.py -v
 """
 
 import os
@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import claude_connector_api as cc
+from weave import connector as cc
 
 
 class _ConnectorBase(unittest.TestCase):

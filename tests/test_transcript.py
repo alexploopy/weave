@@ -1,13 +1,13 @@
 """Tests for the private linear transcript engine.
 
-Run:  python3 -m unittest test_transcript -v
+Run:  python3 -m pytest tests/test_transcript.py -v
 """
 
 import json
 import unittest
 from collections import Counter
 
-import transcript as t
+from weave.transcript import engine as t
 
 
 # A FORKED transcript: a1 has two children -- u2 (older, first in file) and u2b
