@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 
+from weave import core
 from weave.merge.cerebras import CerebrasMerger
 from weave.merge.env import cerebras_configured, describe_cerebras_config, ensure_dotenv_loaded
 from weave.merge.exceptions import MergeClientError, MergeResponseError
@@ -14,6 +18,8 @@ from weave.merge.validator import validate_merged_context
 from merge_test_fixtures import sample_context_a, sample_context_b
 
 ensure_dotenv_loaded()
+
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "merge"
 
 
 def _http_status_from_error(exc: MergeClientError) -> int | None:
@@ -51,6 +57,33 @@ class CerebrasLiveIntegrationTests(unittest.TestCase):
         self.assertTrue(merged.bootstrap_prompt.strip())
         self.assertEqual({s.side for s in merged.sources}, {"a", "b"})
         validate_merged_context(merged, context_a, context_b)
+
+    def test_core_merge_from_jsonl_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path_a = tmp_path / "session_a.jsonl"
+            path_b = tmp_path / "session_b.jsonl"
+            output_dir = tmp_path / "merged"
+            shutil.copy(_FIXTURES / "session_a_minimal.jsonl", path_a)
+            shutil.copy(_FIXTURES / "session_b_minimal.jsonl", path_b)
+
+            try:
+                result = core.merge_contexts(
+                    str(path_a), str(path_b), output_dir=output_dir
+                )
+            except MergeClientError as exc:
+                status = _http_status_from_error(exc)
+                if status in (401, 403):
+                    self.skipTest(f"Cerebras auth/forbidden (HTTP {status}): {exc}")
+                if status == 404:
+                    self.skipTest(f"Cerebras model or endpoint not found (HTTP 404): {exc}")
+                self.skipTest(f"Cerebras HTTP call failed: {exc}")
+            except MergeResponseError as exc:
+                self.fail(f"Cerebras returned output that failed merge validation: {exc}")
+
+            sidecar = Path(result.sidecar_path)
+            self.assertTrue(sidecar.is_file())
+            self.assertIsNone(result.jsonl_path)
 
 
 if __name__ == "__main__":
