@@ -343,6 +343,18 @@ class SupabaseEndToEndTests(_WeaveBase):
         with self.assertRaises(core.WeaveError):
             core.pull("origin", "ghost", cwd=self.cwd, config_path=self.cfg)
 
+    def test_rm_removes_via_real_remote_package(self):
+        # Drives core.rm through the REAL weave.remote package (no server=),
+        # so a missing delete export on the package surface is caught here.
+        self._seed_local("local-1", _VALID_ENTRY)
+        core.push("origin", "auth", "local-1", config_path=self.cfg)
+        core.rm("origin", "auth", config_path=self.cfg)
+        rows = [r for r in self.client.store
+                if r["remote_url"] == "weave://team" and r["name"] == "auth"]
+        self.assertEqual(rows, [])
+        with self.assertRaises(core.WeaveError):
+            core.pull("origin", "auth", cwd=self.cwd, config_path=self.cfg)
+
 
 class MissingCredentialsTests(_WeaveBase):
     """No SUPABASE_* env -> server raises -> core surfaces a WeaveError."""
