@@ -73,10 +73,12 @@ class ResolveTests(_ConnectorBase):
             cc.resolve("dup")
 
     def test_list_sessions_enumerates_across_dirs(self):
-        self.make("-Users-a-proj", "s1")
-        self.make("-Users-b-proj", "s2")
-        got = dict(cc.list_sessions())
-        self.assertEqual(set(got), {"s1", "s2"})
+        f1 = self.make("-Users-a-proj", "s1")
+        f2 = self.make("-Users-b-proj", "s2")
+        result = cc.list_sessions()
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, sorted([("s1", f1), ("s2", f2)],
+                                        key=lambda pair: str(pair[1])))
 
     def test_list_sessions_empty_when_no_root(self):
         self.assertEqual(cc.list_sessions(), [])

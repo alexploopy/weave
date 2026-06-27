@@ -92,11 +92,11 @@ def write_text(path, text):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(
-        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+        dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(text)
-        os.replace(tmp, str(path))
+        os.replace(tmp, path)
     except BaseException:
         try:
             os.unlink(tmp)
