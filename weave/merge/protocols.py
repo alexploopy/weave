@@ -1,25 +1,19 @@
-"""Merge-layer plug-in point for future Cerebras (or stub) implementations."""
+"""Merge-layer plug-in point."""
 
 from __future__ import annotations
 
 from typing import Protocol
 
 from weave.context.types import ChatContext
-from weave.merge.types import MergedContext
 
 
 class ContextMerger(Protocol):
-    """Merge two distilled session contexts into one semantic result."""
+    """Merge a shared background + two raw branches into a briefing document."""
 
     def merge(
         self,
-        context_a: ChatContext,
-        context_b: ChatContext,
-        *,
-        feedback: str | None = None,
-    ) -> MergedContext:
-        """Return a merged context.
-
-        ``feedback`` carries reprompt-loop rejection text from a prior attempt.
-        """
+        shared_context: ChatContext | None,
+        a_branch: list[dict],
+        b_branch: list[dict],
+    ) -> str:
         ...

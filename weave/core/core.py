@@ -19,25 +19,14 @@ before writing anything locally.
 import importlib
 import json
 import os
-import tempfile
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from weave import config
 from weave import connector as cc
 from weave import transcript as tx
 from weave.context.distill import distill_from_jsonl
-from weave.merge.factory import default_merger
-from weave.merge.protocols import ContextMerger
-from weave.merge.types import MergedContext
-
-_DEFAULT_MERGED_DIR = ".weave/merged"
-_WEAVE_MERGE_VERSION = "1"
-_COMPATIBILITY_NOTE = (
-    "MergedContext sidecar only; Claude resume compatibility is unverified."
-)
 
 _VOLATILE_BLOCK_KEYS = ("id", "tool_use_id")
 
@@ -93,15 +82,6 @@ class WeaveError(ValueError):
 
 @dataclass(frozen=True)
 class MergeResult:
-    merge_id: str
-    sidecar_path: str
-    source_a_path: str
-    source_b_path: str
-    jsonl_path: str | None = None
-
-
-@dataclass(frozen=True)
-class MergedSession:
     session_id: str
     jsonl_path: str
     branch_point: str | None
@@ -196,105 +176,6 @@ def ls(remote=None, *, cwd=None, server=None, config_path=None):
 
 
 # --- merge -------------------------------------------------------------------
-def _resolve_source_path(source: str) -> str:
-    if os.sep in source or source.endswith(".jsonl"):
-        return str(Path(source).resolve())
-    resolved = cc.resolve(source)
-    if resolved is not None:
-        return str(resolved)
-    return source
-
-
-def _write_merge_sidecar(
-    merged: MergedContext,
-    *,
-    merge_id: str,
-    source_a_path: str,
-    source_b_path: str,
-    distill_warnings: dict[str, list[str]],
-    output_dir: Path,
-) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    sidecar_path = output_dir / f"{merge_id}.json"
-    payload = {
-        "weave_merge_version": _WEAVE_MERGE_VERSION,
-        "claude_jsonl_compatible": False,
-        "compatibility_note": _COMPATIBILITY_NOTE,
-        "merge_id": merge_id,
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-        "source_a_path": source_a_path,
-        "source_b_path": source_b_path,
-        "distill_warnings": distill_warnings,
-        "merged_context": merged.to_dict(),
-    }
-    text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    fd, tmp = tempfile.mkstemp(
-        dir=output_dir, prefix=sidecar_path.name + ".", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-            handle.write(text)
-        os.replace(tmp, sidecar_path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    return sidecar_path
-
-
-def merge_contexts(
-    source_a: str,
-    source_b: str,
-    *,
-    cwd: str | None = None,
-    output_dir: str | Path | None = None,
-    merger: ContextMerger | None = None,
-) -> MergeResult:
-    """Read two JSONL sessions, merge via Cerebras, write a sidecar JSON."""
-    cwd = cwd or os.getcwd()
-    source_a_path = _resolve_source_path(source_a)
-    source_b_path = _resolve_source_path(source_b)
-
-    text_a = cc.read_text(source_a)
-    text_b = cc.read_text(source_b)
-
-    try:
-        distilled_a = distill_from_jsonl(
-            text_a, source_label="a", source_path=source_a_path
-        )
-        distilled_b = distill_from_jsonl(
-            text_b, source_label="b", source_path=source_b_path
-        )
-    except ValueError as exc:
-        raise WeaveError(str(exc)) from exc
-
-    active_merger = merger or default_merger()
-    merged = active_merger.merge(distilled_a.context, distilled_b.context)
-
-    merge_id = _new_id()
-    out_dir = Path(output_dir) if output_dir is not None else Path(cwd) / _DEFAULT_MERGED_DIR
-    sidecar_path = _write_merge_sidecar(
-        merged,
-        merge_id=merge_id,
-        source_a_path=source_a_path,
-        source_b_path=source_b_path,
-        distill_warnings={
-            "a": distilled_a.warnings,
-            "b": distilled_b.warnings,
-        },
-        output_dir=out_dir,
-    )
-    return MergeResult(
-        merge_id=merge_id,
-        sidecar_path=str(sidecar_path),
-        source_a_path=source_a_path,
-        source_b_path=source_b_path,
-        jsonl_path=None,
-    )
-
-
 def _read_source(source):
     """Read a session's JSONL by id or path, mapping connector errors to WeaveError."""
     try:
@@ -337,13 +218,13 @@ def merge(source_a, source_b, *, cwd=None, merger=None):
 
     shared_ctx = _distill_shared(a, branch_point, source_a)
 
-    from weave.merge.briefing import default_briefing_merger
-    active = merger or default_briefing_merger()
+    from weave.merge.factory import default_merger
+    active = merger or default_merger()
     briefing = active.merge(shared_ctx, a_tail, b_tail)   # MergeError propagates; nothing written yet
 
     entries = list(a)
     if a_tail:
-        entries, _ = tx.delete_between(entries, a_tail[0]["uuid"], a[-1]["uuid"])
+        entries, _ = tx.delete_between(entries, a_tail[0]["uuid"], a_tail[-1]["uuid"])
     spec = {
         "type": "tool_call", "name": "Read",
         "input": {"file_path": "weave-merged-context"},
@@ -359,7 +240,7 @@ def merge(source_a, source_b, *, cwd=None, merger=None):
     entries = _rewrite_for_local(entries, new_id, cwd)
     path = cc.session_path(cwd, new_id)
     cc.write_text(path, tx.to_text(entries))
-    return MergedSession(
+    return MergeResult(
         session_id=new_id, jsonl_path=str(path), branch_point=branch_point,
         a_tail_len=len(a_tail), b_tail_len=len(b_tail),
     )

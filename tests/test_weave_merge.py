@@ -13,7 +13,7 @@ from unittest import mock
 from weave import connector as cc
 from weave import core
 from weave.core import core as _core
-from weave.merge.briefing import StubBriefingMerger
+from weave.merge import StubMerger
 
 
 def _user(uuid, text, *, sid="s", cwd="/a", ts="2026-06-26T10:00:00.000Z"):
@@ -157,7 +157,7 @@ class _MergeBase(unittest.TestCase):
 class MergeWritesResumableSessionTests(_MergeBase):
     def test_shared_prefix_preserved_and_read_cycle_spliced(self):
         result = core.merge(str(self.a_path), str(self.b_path),
-                            cwd=self.cwd, merger=StubBriefingMerger())
+                            cwd=self.cwd, merger=StubMerger())
         entries = self._written_entries(result)
 
         # Shared prefix (2 turns) preserved verbatim by content.
@@ -182,7 +182,7 @@ class MergeWritesResumableSessionTests(_MergeBase):
 
     def test_identity_rewritten_for_local_machine(self):
         result = core.merge(str(self.a_path), str(self.b_path),
-                            cwd=self.cwd, merger=StubBriefingMerger())
+                            cwd=self.cwd, merger=StubMerger())
         entries = self._written_entries(result)
         for e in entries:
             self.assertEqual(e["cwd"], self.cwd)
@@ -192,7 +192,7 @@ class MergeWritesResumableSessionTests(_MergeBase):
 
     def test_result_reports_branch_lengths(self):
         result = core.merge(str(self.a_path), str(self.b_path),
-                            cwd=self.cwd, merger=StubBriefingMerger())
+                            cwd=self.cwd, merger=StubMerger())
         self.assertEqual(result.a_tail_len, 1)
         self.assertEqual(result.b_tail_len, 1)
         self.assertIsNotNone(result.branch_point)
@@ -203,12 +203,12 @@ class MergeErrorTests(_MergeBase):
         self.b_path.write_text(_VALID_A, encoding="utf-8")
         with self.assertRaises(core.WeaveError):
             core.merge(str(self.a_path), str(self.b_path),
-                       cwd=self.cwd, merger=StubBriefingMerger())
+                       cwd=self.cwd, merger=StubMerger())
 
     def test_missing_source_raises_weave_error(self):
         with self.assertRaises(core.WeaveError):
             core.merge(str(Path(self.tmp) / "nope.jsonl"), str(self.b_path),
-                       cwd=self.cwd, merger=StubBriefingMerger())
+                       cwd=self.cwd, merger=StubMerger())
 
     def test_empty_shared_prefix_yields_only_read_cycle(self):
         self.a_path.write_text(
@@ -222,7 +222,7 @@ class MergeErrorTests(_MergeBase):
             '"message":{"role":"user","content":"B unique start"}}\n',
             encoding="utf-8")
         result = core.merge(str(self.a_path), str(self.b_path),
-                            cwd=self.cwd, merger=StubBriefingMerger())
+                            cwd=self.cwd, merger=StubMerger())
         self.assertIsNone(result.branch_point)
         entries = self._written_entries(result)
         # Only the Read cycle remains (assistant tool_use + user tool_result).

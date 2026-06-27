@@ -75,30 +75,18 @@ class CliTests(CliBase):
         self.assertEqual(rc, 0)
         self.assertEqual(config.get_remote("origin", path=self.cfg), "u@h:/p")
 
-    def test_merge_subcommand_prints_sidecar_path(self):
-        sidecar = self.tmp / "merged" / "test-merge.json"
-        sidecar.parent.mkdir(parents=True, exist_ok=True)
-        sidecar.write_text("{}", encoding="utf-8")
-        expected = core.MergeResult(
-            merge_id="test-merge",
-            sidecar_path=str(sidecar),
-            source_a_path=str(self.tmp / "a.jsonl"),
-            source_b_path=str(self.tmp / "b.jsonl"),
-        )
-        with mock.patch.object(core, "merge_contexts", return_value=expected):
+    def test_merge_subcommand_prints_resume_hint(self):
+        expected = _core_mod.MergeResult(
+            session_id="merged-123", jsonl_path="/tmp/merged-123.jsonl",
+            branch_point="bp", a_tail_len=1, b_tail_len=2)
+        with mock.patch.object(core, "merge", return_value=expected) as m:
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                rc = cli.main(
-                    [
-                        "merge",
-                        str(self.tmp / "a.jsonl"),
-                        str(self.tmp / "b.jsonl"),
-                        "--output-dir",
-                        str(self.tmp / "merged"),
-                    ]
-                )
+                rc = cli.main(["merge", "/tmp/a.jsonl", "/tmp/b.jsonl"])
         self.assertEqual(rc, 0)
-        self.assertEqual(out.getvalue().strip(), str(sidecar))
+        m.assert_called_once_with("/tmp/a.jsonl", "/tmp/b.jsonl")
+        self.assertIn("merged-123", out.getvalue())
+        self.assertIn("claude --resume merged-123", out.getvalue())
 
 
 if __name__ == "__main__":

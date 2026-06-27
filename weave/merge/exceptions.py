@@ -6,7 +6,7 @@ class MergeError(Exception):
 
 
 class MergeResponseError(MergeError):
-    """Model output could not be parsed into a valid :class:`MergedContext`."""
+    """Model output was empty or unusable."""
 
 
 class MergeClientError(MergeError):
