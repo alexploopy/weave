@@ -1,9 +1,3 @@
-# --- Project-specific ---
-# Documentation build/working dir (not yet present, ignored ahead of time)
-docs/
-# Superpowers plugin (not yet present, ignored ahead of time)
-superpowers/
-
 # --- Python ---
 # Byte-compiled / optimized / cached files
 __pycache__/
