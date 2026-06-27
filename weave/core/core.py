@@ -160,6 +160,29 @@ def _resolve_session(session, cwd):
         raise WeaveError(str(e)) from e
 
 
+def _resolve_local_id(source, *, config_path=None):
+    """Map a logical *name* (the alias a prior push/pull recorded for a session)
+    to the local session id it stands for.
+
+    Sources that already name a file path or resolve directly as a local session
+    id pass through unchanged. Otherwise the operation log is consulted and the
+    most recent entry whose ``name`` matches yields its local ``id``. When no
+    alias matches, the original string is returned so the caller's reader can
+    raise the usual "no session" error.
+    """
+    if os.sep in source or source.endswith(".jsonl"):
+        return source
+    try:
+        if cc.resolve(source) is not None:
+            return source
+    except ValueError:
+        return source            # ambiguous id -- let the reader report it
+    for entry in reversed(config.read_log(path=config_path)):
+        if entry.get("name") == source and entry.get("id"):
+            return entry["id"]
+    return source
+
+
 def _now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -274,7 +297,7 @@ def _distill_shared(a_entries, branch_point, source_path):
         raise WeaveError(str(exc)) from exc
 
 
-def merge(source_a, source_b, *, cwd=None, merger=None):
+def merge(source_a, source_b, *, cwd=None, merger=None, config_path=None):
     """Merge two sessions into a new resumable cloned session.
 
     Detects the shared content prefix, asks the merge layer for one briefing
@@ -283,10 +306,12 @@ def merge(source_a, source_b, *, cwd=None, merger=None):
     briefing. Identity is rewritten for the local machine and the clone is
     written under ~/.claude. Both sources are left untouched.
 
-    Either source may be ``"auto"`` to use the newest local session for `cwd`.
+    Either source may be ``"auto"`` to use the newest local session for `cwd`,
+    a raw local session id, a path, or the logical *name* a prior push/pull
+    recorded for the session (resolved via the operation log).
     """
-    source_a = _resolve_session(source_a, cwd)
-    source_b = _resolve_session(source_b, cwd)
+    source_a = _resolve_local_id(_resolve_session(source_a, cwd), config_path=config_path)
+    source_b = _resolve_local_id(_resolve_session(source_b, cwd), config_path=config_path)
     a = tx.from_text(_read_source(source_a))
     b = tx.from_text(_read_source(source_b))
     if not a and not b:

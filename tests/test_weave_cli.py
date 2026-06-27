@@ -107,6 +107,39 @@ class CliTests(CliBase):
         self.assertIn("merge", text)
         self.assertIn("log", text)
 
+    def test_help_shows_command_parameters_and_optional_markers(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = cli.main(["help"])
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("usage: weave", text)
+        # Required parameters are shown for each command...
+        self.assertIn("<name>", text)
+        self.assertIn("<source-a>", text)
+        self.assertIn("--session", text)
+        # ...and optional fields are bracketed.
+        self.assertIn("[<remote>]", text)
+
+    def test_help_flags_match_help_subcommand(self):
+        rendered = {}
+        for arg in ("help", "--help", "-h"):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cli.main([arg])
+            self.assertEqual(rc, 0)
+            rendered[arg] = buf.getvalue()
+        self.assertTrue(rendered["help"].strip())
+        self.assertEqual(rendered["help"], rendered["--help"])
+        self.assertEqual(rendered["help"], rendered["-h"])
+
+    def test_no_args_prints_help(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = cli.main([])
+        self.assertEqual(rc, 0)
+        self.assertIn("usage: weave", out.getvalue())
+
     def test_push_session_auto_uses_latest_local(self):
         core.remote_add("origin", "u@h:/p", path=self.cfg)
         cc.write_text(cc.session_path(self.cwd, "old"), '{"uuid":"o"}\n')

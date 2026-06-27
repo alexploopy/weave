@@ -198,6 +198,58 @@ class MergeWritesResumableSessionTests(_MergeBase):
         self.assertIsNotNone(result.branch_point)
 
 
+class MergeResolvesAliasTests(_MergeBase):
+    """`weave merge` accepts the logical name an op log recorded for a session,
+    not only the raw local session id."""
+
+    def _seed_local(self, sid, text):
+        cc.write_text(cc.session_path(self.cwd, sid), text)
+        return sid
+
+    def test_merge_accepts_logged_name_alias_for_source(self):
+        from weave import config
+        a_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        b_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        self._seed_local(a_id, _VALID_A)
+        self._seed_local(b_id, _VALID_B)
+        cfg = Path(self.tmp) / ".weave" / "config"
+        # A prior pull recorded the alias "alice-feature" -> a_id.
+        config.append_log(
+            {"ts": "t", "op": "pull", "remote": "origin",
+             "name": "alice-feature", "id": a_id}, path=cfg)
+
+        result = core.merge("alice-feature", b_id, cwd=self.cwd,
+                            merger=StubMerger(), config_path=cfg)
+
+        self.assertTrue(Path(result.jsonl_path).is_file())
+        self.assertEqual(result.a_tail_len, 1)
+        self.assertEqual(result.b_tail_len, 1)
+
+    def test_most_recent_alias_entry_wins(self):
+        from weave import config
+        old_id = "11111111-1111-1111-1111-111111111111"
+        new_id = "22222222-2222-2222-2222-222222222222"
+        b_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        self._seed_local(new_id, _VALID_A)
+        self._seed_local(b_id, _VALID_B)
+        cfg = Path(self.tmp) / ".weave" / "config"
+        # Same name reused; the newest log entry points at the live session.
+        config.append_log({"op": "pull", "name": "feature", "id": old_id}, path=cfg)
+        config.append_log({"op": "pull", "name": "feature", "id": new_id}, path=cfg)
+
+        result = core.merge("feature", b_id, cwd=self.cwd,
+                            merger=StubMerger(), config_path=cfg)
+        self.assertTrue(Path(result.jsonl_path).is_file())
+
+    def test_raw_session_id_still_works(self):
+        a_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        b_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        self._seed_local(a_id, _VALID_A)
+        self._seed_local(b_id, _VALID_B)
+        result = core.merge(a_id, b_id, cwd=self.cwd, merger=StubMerger())
+        self.assertTrue(Path(result.jsonl_path).is_file())
+
+
 class MergeErrorTests(_MergeBase):
     def test_identical_sessions_raise(self):
         self.b_path.write_text(_VALID_A, encoding="utf-8")
