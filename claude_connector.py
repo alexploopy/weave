@@ -9,7 +9,6 @@ Storage base honors $CLAUDE_CONFIG_DIR if set, else ~/.claude. Stdlib only.
 
 import os
 import re
-import tempfile
 from pathlib import Path
 
 _ENCODE_RE = re.compile(r"[^A-Za-z0-9]")
