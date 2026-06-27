@@ -43,7 +43,7 @@ _HELP_GROUPS = [
         ("merge <source-a> <source-b>", "Merge two sessions into a new session"),
     ]),
     ("manage remotes and stored sessions", [
-        ("remote add <name> <url>", "Register a remote"),
+        ("remote add <url>", "Register a remote"),
         ("rm [<remote>] <name>", "Delete a session from a remote"),
         ("ls [<remote>]", "List local (or remote) sessions"),
     ]),
@@ -114,8 +114,7 @@ def _build_parser():
                         description="Manage the remotes weave can push to and pull from.")
     rmsub = rm.add_subparsers(dest="remote_cmd", required=True, metavar="<subcommand>")
     rma = rmsub.add_parser("add", help="register a remote",
-                           description="Register a remote named <name> at <url>.")
-    rma.add_argument("name", metavar="<name>", help="local name for the remote")
+                           description="Register a remote at <url>. Named 'origin' by default.")
     rma.add_argument("url", metavar="<url>", help="remote url / connection string")
 
     lsp = sub.add_parser("ls", help="list local (or remote) sessions",
@@ -159,8 +158,8 @@ def main(argv=None):
             remote = core.rm(args.remote, args.name)
             print(f"removed {remote}/{args.name}")
         elif args.cmd == "remote":
-            core.remote_add(args.name, args.url)
-            print(f"remote {args.name!r} set")
+            core.remote_add("origin", args.url)
+            print(f"remote 'origin' set")
         elif args.cmd == "ls":
             for sid in core.ls(args.remote):
                 print(sid)

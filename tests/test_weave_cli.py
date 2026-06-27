@@ -6,6 +6,7 @@ Run (from repo root):  python3 -m pytest tests/test_weave_cli.py -v
 import contextlib
 import io
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,10 @@ from unittest import mock
 from weave import cli, config, connector as cc, core
 from weave.config import config as _config_mod
 from weave.core import core as _core_mod
+
+
+def _strip_ansi(text):
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
 
 
 class FakeServer:
@@ -112,13 +117,11 @@ class CliTests(CliBase):
         with contextlib.redirect_stdout(out):
             rc = cli.main(["help"])
         self.assertEqual(rc, 0)
-        text = out.getvalue()
+        text = _strip_ansi(out.getvalue())
         self.assertIn("usage: weave", text)
-        # Required parameters are shown for each command...
         self.assertIn("<name>", text)
         self.assertIn("<source-a>", text)
         self.assertIn("--session", text)
-        # ...and optional fields are bracketed.
         self.assertIn("[<remote>]", text)
 
     def test_help_flags_match_help_subcommand(self):
@@ -138,7 +141,7 @@ class CliTests(CliBase):
         with contextlib.redirect_stdout(out):
             rc = cli.main([])
         self.assertEqual(rc, 0)
-        self.assertIn("usage: weave", out.getvalue())
+        self.assertIn("usage: weave", _strip_ansi(out.getvalue()))
 
     def test_push_session_auto_uses_latest_local(self):
         core.remote_add("origin", "u@h:/p", path=self.cfg)
@@ -169,7 +172,7 @@ class CliTests(CliBase):
 
     def test_remote_add_subcommand(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = cli.main(["remote", "add", "origin", "u@h:/p"])
+            rc = cli.main(["remote", "add", "u@h:/p"])
         self.assertEqual(rc, 0)
         self.assertEqual(config.get_remote("origin", path=self.cfg), "u@h:/p")
 
