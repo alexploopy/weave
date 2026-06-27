@@ -1,7 +1,6 @@
-"""Cerebras merge layer contracts."""
+"""Merge layer: stub and Cerebras implementations of :class:`ContextMerger`."""
 
 from weave.merge.cerebras import CerebrasMerger
-from weave.merge.validator import validate_merged_context
 from weave.merge.exceptions import MergeClientError, MergeError, MergeResponseError
 from weave.merge.protocols import ContextMerger
 from weave.merge.stub import StubMerger
@@ -12,6 +11,7 @@ from weave.merge.types import (
     MergedDecision,
     SourceRef,
 )
+from weave.merge.validator import validate_merged_context
 
 __all__ = [
     "MERGE_SCHEMA_VERSION",

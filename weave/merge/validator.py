@@ -38,11 +38,8 @@ def _mentions_branch_mismatch(text: str) -> bool:
     return "branch" in lowered and ("mismatch" in lowered or "differ" in lowered)
 
 
-def _validate_source_ref(ref: SourceRef, context: ChatContext, side: Side) -> None:
-    if ref.side != side:
-        raise MergeResponseError(
-            f"merged.sources entry for side {side!r} has mismatched side {ref.side!r}"
-        )
+def _validate_source_ref(ref: SourceRef, context: ChatContext) -> None:
+    side = ref.side
     if ref.session_id != context.session_id:
         raise MergeResponseError(
             f"merged.sources session_id {ref.session_id!r} does not match "
@@ -74,6 +71,8 @@ def validate_merged_context(
     if not merged.bootstrap_prompt.strip():
         raise MergeResponseError("merged bootstrap_prompt must be non-empty")
 
+    contexts = {"a": context_a, "b": context_b}
+
     for decision in merged.decisions:
         for side in decision.sources:
             if side not in _VALID_SIDES:
@@ -87,8 +86,7 @@ def validate_merged_context(
             raise MergeResponseError(
                 f"merged.sources side must be 'a' or 'b', got {ref.side!r}"
             )
-        context = context_a if ref.side == "a" else context_b
-        _validate_source_ref(ref, context, ref.side)
+        _validate_source_ref(ref, contexts[ref.side])
         sides_seen.add(ref.side)
 
     if sides_seen != _VALID_SIDES:
