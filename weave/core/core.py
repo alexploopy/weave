@@ -178,14 +178,16 @@ def pull(remote, name, *, cwd=None, server=None, config_path=None):
 def push(remote, name, session_id, *, server=None, config_path=None):
     """Upload the local `session_id` to `remote` (Supabase) under `name`.
 
-    `remote` may be ``None`` to use the sole configured remote. Bytes are sent
-    as-is; all machine-specific rewriting happens on `pull`.
+    `remote` may be ``None`` to use the sole configured remote. Returns the
+    resolved remote name so callers can report where the push landed. Bytes are
+    sent as-is; all machine-specific rewriting happens on `pull`.
     """
     text = cc.read_text(session_id)            # SessionNotFound/Ambiguous propagate
     remote = _resolve_remote(remote, path=config_path)
     url = _remote_url(remote, path=config_path)
     svr = server or _load_server()
     _remote_call(svr.push, url, name, text, action="push", target=f"{remote}/{name}")
+    return remote
 
 
 def ls(remote=None, *, cwd=None, server=None, config_path=None):

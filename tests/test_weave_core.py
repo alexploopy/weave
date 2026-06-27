@@ -133,10 +133,11 @@ class PushTests(_WeaveBase):
         core.remote_add("origin", "u@h:/p", path=self.cfg)
         self._seed_session("sess-1", '{"uuid":"x"}\n')
         fake = FakeServer()
-        core.push(None, "auth-refactor", "sess-1",
-                  server=fake, config_path=self.cfg)
+        resolved = core.push(None, "auth-refactor", "sess-1",
+                             server=fake, config_path=self.cfg)
         self.assertEqual(
             fake.pushed, [("u@h:/p", "auth-refactor", '{"uuid":"x"}\n')])
+        self.assertEqual(resolved, "origin")  # returns the remote it resolved to
 
     def test_push_no_remote_arg_with_no_remotes_raises(self):
         self._seed_session("sess-1", '{"uuid":"x"}\n')

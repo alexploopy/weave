@@ -45,8 +45,8 @@ def main(argv=None):
     args = _build_parser().parse_args(argv)
     try:
         if args.cmd == "push":
-            core.push(args.remote, args.name, args.session_id)
-            print(f"pushed {args.session_id} -> {args.remote}/{args.name}")
+            remote = core.push(args.remote, args.name, args.session_id)
+            print(f"pushed {args.session_id} -> {remote}/{args.name}")
         elif args.cmd == "pull":
             new_id = core.pull(args.remote, args.name)
             print(f"pulled into {new_id}\n  resume: claude --resume {new_id}")
