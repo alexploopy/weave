@@ -1,0 +1,93 @@
+"""Tests for server.py (the Supabase-backed remote transport).
+
+A fake `supabase` module is injected into sys.modules so the real
+`from supabase import create_client` path runs against an in-memory client --
+no network, no real project. server.py is otherwise exercised verbatim.
+
+Run (from repo root):  python3 -m unittest test_server
+"""
+
+import os
+import sys
+import types
+import unittest
+from unittest import mock
+
+import server
+from fake_supabase import FakeSupabaseClient
+
+
+class _ServerBase(unittest.TestCase):
+    def setUp(self):
+        self.client = FakeSupabaseClient()
+        fake_mod = types.ModuleType("supabase")
+        fake_mod.create_client = lambda url, key: self.client
+        mods = mock.patch.dict(sys.modules, {"supabase": fake_mod})
+        mods.start()
+        self.addCleanup(mods.stop)
+        env = mock.patch.dict(
+            os.environ,
+            {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_KEY": "svc"})
+        env.start()
+        self.addCleanup(env.stop)
+        server._reset_client_cache()
+        self.addCleanup(server._reset_client_cache)
+
+
+class PushPullTests(_ServerBase):
+    def test_push_then_pull(self):
+        server.push("weave://team", "auth", "TRANSCRIPT\n")
+        self.assertEqual(server.pull("weave://team", "auth"), "TRANSCRIPT\n")
+
+    def test_push_stores_expected_row(self):
+        server.push("weave://team", "auth", "T\n")
+        rows = self.client.store
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["remote_url"], "weave://team")
+        self.assertEqual(rows[0]["name"], "auth")
+        self.assertEqual(rows[0]["transcript"], "T\n")
+
+    def test_push_overwrites_on_conflict(self):
+        server.push("weave://team", "auth", "first\n")
+        server.push("weave://team", "auth", "second\n")
+        self.assertEqual(len(self.client.store), 1)
+        self.assertEqual(server.pull("weave://team", "auth"), "second\n")
+
+    def test_pull_missing_raises(self):
+        with self.assertRaises(server.ServerError):
+            server.pull("weave://team", "ghost")
+
+    def test_pull_scoped_by_remote_url(self):
+        server.push("weave://team-a", "auth", "A\n")
+        with self.assertRaises(server.ServerError):
+            server.pull("weave://team-b", "auth")
+
+
+class ListTests(_ServerBase):
+    def test_list_returns_names_for_remote(self):
+        server.push("weave://team", "auth", "1\n")
+        server.push("weave://team", "ui", "2\n")
+        server.push("weave://other", "infra", "3\n")
+        self.assertEqual(set(server.list("weave://team")), {"auth", "ui"})
+
+    def test_list_empty_remote(self):
+        self.assertEqual(server.list("weave://nobody"), [])
+
+
+class CredentialTests(unittest.TestCase):
+    def setUp(self):
+        server._reset_client_cache()
+        self.addCleanup(server._reset_client_cache)
+        env = mock.patch.dict(os.environ, {}, clear=False)
+        env.start()
+        os.environ.pop("SUPABASE_URL", None)
+        os.environ.pop("SUPABASE_KEY", None)
+        self.addCleanup(env.stop)
+
+    def test_missing_creds_raises_server_error(self):
+        with self.assertRaises(server.ServerError):
+            server.push("weave://team", "auth", "T\n")
+
+
+if __name__ == "__main__":
+    unittest.main()

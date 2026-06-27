@@ -2,12 +2,18 @@
 
 Owns ALL policy (id choice, cwd/sessionId rewrite, config resolution,
 validation). Delegates mechanics to claude_connector_api (byte I/O),
-transcript_api (entry editing), and a lazily-loaded `server` collaborator
-(byte transport). Stdlib only.
-Owns ALL policy (id choice, cwd/sessionId rewrite, validation). Delegates
-mechanics to claude_connector_api (byte I/O), transcript_api (entry editing),
-config (remote resolution), and a lazily-loaded `server` collaborator
-(byte transport). Stdlib only. (`merge` is intentionally not implemented yet.)
+transcript_api (entry editing), weave.config (remote resolution), the `server`
+collaborator (byte transport backed by Supabase), and the merge layer
+(distill + Cerebras). Stdlib only here; the Supabase dependency lives entirely
+behind `server`.
+
+Data pipeline for the remote operations:
+
+    Supabase (weave_sessions) <--API--> server.py --text--> weave.core
+
+`server` moves raw transcript text keyed by (remote_url, name); this module
+applies every machine-specific policy (fresh id, cwd/sessionId rewrite) before
+writing anything locally.
 """
 
 import importlib
@@ -21,26 +27,21 @@ from pathlib import Path
 
 import claude_connector_api as cc
 import transcript_api as tx
-
+from weave import config
 from weave.context.distill import distill_from_jsonl
 from weave.merge.factory import default_merger
 from weave.merge.protocols import ContextMerger
 from weave.merge.types import MergedContext
 
-_DEFAULT_CONFIG = ".weave/config"
 _DEFAULT_MERGED_DIR = ".weave/merged"
 _WEAVE_MERGE_VERSION = "1"
 _COMPATIBILITY_NOTE = (
     "MergedContext sidecar only; Claude resume compatibility is unverified."
 )
 
-import claude_connector_api as cc
-import transcript_api as tx
-from weave import config
-
 
 class WeaveError(ValueError):
-    """Any weave-layer error (unknown remote, empty history)."""
+    """Any weave-layer error (unknown remote, empty history, remote transport)."""
 
 
 @dataclass(frozen=True)
@@ -53,30 +54,42 @@ class MergeResult:
 
 
 # --- config ------------------------------------------------------------------
-def _read_config(*, path=None):
-    cfg = configparser.ConfigParser()
-    p = Path(path or _DEFAULT_CONFIG)
-    if p.is_file():
-        cfg.read(p, encoding="utf-8")
-    return cfg
-
-
-def _remote_url(name, *, path=None):
-    cfg = _read_config(path=path)
-    section = f'remote "{name}"'
-    if not cfg.has_option(section, "url"):
-        raise WeaveError(f"no remote {name!r}; add it with 'weave remote add'")
-    return cfg.get(section, "url")
-
-
 def remote_add(name, url, *, path=None):
     config.add_remote(name, url, path=path)
+
+
+def _remote_url(remote, *, path=None):
+    """Resolve a remote name to its url, as a WeaveError on failure.
+
+    Thin orchestrator-level adapter over :func:`weave.config.get_remote` so
+    every weave-layer error shares the ``WeaveError`` (``ValueError``) base.
+    """
+    try:
+        return config.get_remote(remote, path=path)
+    except ValueError as e:
+        raise WeaveError(str(e)) from e
 
 
 def _load_server():
     return importlib.import_module("server")
 
 
+def _remote_call(fn, *args, action, target):
+    """Invoke a `server` transport call, mapping any failure to WeaveError.
+
+    Keeps the original (actionable) message from the transport layer -- e.g.
+    missing credentials or an absent remote session -- while tagging it with
+    what was being attempted so the CLI surfaces a clear `weave: ...` line.
+    """
+    try:
+        return fn(*args)
+    except WeaveError:
+        raise
+    except ValueError as e:
+        raise WeaveError(f"{action} {target}: {e}") from e
+
+
+# --- operations --------------------------------------------------------------
 def _new_id():
     return str(uuid.uuid4())
 
@@ -86,8 +99,15 @@ def _rewrite_for_local(entries, new_id, cwd):
 
 
 def pull(remote, name, *, cwd=None, server=None, config_path=None):
-    url = config.get_remote(remote, path=config_path)
-    text = (server or _load_server()).pull(url, name)
+    """Download `name` from `remote` (Supabase) into a fresh local session.
+
+    Pipeline: server.pull -> transcript_api parse -> local id/cwd rewrite ->
+    connector write. Validates (unknown remote, transport failure, empty
+    history) and fails before any local write.
+    """
+    url = _remote_url(remote, path=config_path)
+    svr = server or _load_server()
+    text = _remote_call(svr.pull, url, name, action="pull", target=f"{remote}/{name}")
     entries = tx.from_text(text)
     if not entries:
         raise WeaveError(f"session {name!r} has no chat history")
@@ -99,9 +119,14 @@ def pull(remote, name, *, cwd=None, server=None, config_path=None):
 
 
 def push(remote, name, session_id, *, server=None, config_path=None):
-    text = cc.read_text(session_id)
-    url = config.get_remote(remote, path=config_path)
-    (server or _load_server()).push(url, name, text)
+    """Upload the local `session_id` to `remote` (Supabase) under `name`.
+
+    Bytes are sent as-is; all machine-specific rewriting happens on `pull`.
+    """
+    text = cc.read_text(session_id)            # SessionNotFound/Ambiguous propagate
+    url = _remote_url(remote, path=config_path)
+    svr = server or _load_server()
+    _remote_call(svr.push, url, name, text, action="push", target=f"{remote}/{name}")
 
 
 def ls(remote=None, *, cwd=None, server=None, config_path=None):
@@ -109,10 +134,12 @@ def ls(remote=None, *, cwd=None, server=None, config_path=None):
         enc = cc.encode_cwd(cwd or os.getcwd())
         return [sid for sid, path in cc.list_sessions()
                 if path.parent.name == enc]
-    url = config.get_remote(remote, path=config_path)
-    return (server or _load_server()).list(url)
+    url = _remote_url(remote, path=config_path)
+    svr = server or _load_server()
+    return _remote_call(svr.list, url, action="ls", target=remote)
 
 
+# --- merge -------------------------------------------------------------------
 def _resolve_source_path(source: str) -> str:
     if os.sep in source or source.endswith(".jsonl"):
         return str(Path(source).resolve())

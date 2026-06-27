@@ -1,0 +1,6 @@
+# weave runtime dependencies.
+#
+# The core engine (transcript_api, claude_connector_api, weave.core) is stdlib
+# only. The single third-party dependency is the Supabase client, used by
+# server.py for the remote push/pull/list transport.
+supabase>=2.0
